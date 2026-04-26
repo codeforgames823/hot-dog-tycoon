@@ -1,0 +1,1905 @@
+/* =====================================================
+   HOT DOG TYCOON - Game Logic
+   A web-based life sim where you're a hot dog climbing
+   the corporate ladder in the big city.
+===================================================== */
+
+// ---------- CONFIG ----------
+// Backend API for global leaderboard. Override at runtime via:
+//   localStorage.setItem('hdt_api', 'https://your-api-host')
+// or by setting window.HDT_API_URL before this script loads.
+const API_URL = (typeof window !== 'undefined' && window.HDT_API_URL)
+  || (typeof localStorage !== 'undefined' && localStorage.getItem('hdt_api'))
+  || ''; // empty disables global leaderboard (falls back to local)
+
+const SAVE_KEY = 'hdt_save_v2';
+const LOCAL_LB_KEY = 'hdt_lb_local';
+const PLAYER_NAME_KEY = 'hdt_name';
+
+// ---------- GAME STATE ----------
+const state = {
+  money: 60,
+  energy: 100,
+  hunger: 100,
+  mood: 80,
+  xp: 0,
+  careerLevel: 0,        // index into CAREERS
+  day: 1,
+  timeMin: 6 * 60,       // 6:00 AM, in minutes (0..1440)
+  cameraX: 0,            // world scroll
+  playerWorldX: 400,     // player's actual world position
+  playerVel: 0,
+  facing: 1,             // 1 right, -1 left
+  walking: false,
+  inBuilding: null,
+  hasJob: false,
+  ownsCart: false,
+  ownsApartment: false,
+  investments: 0,        // value invested
+  outfit: 'plain',       // plain, tie, suit, tux, ceo
+  totalEarned: 0,
+  hasWon: false,
+
+  // 3D interior state
+  interiorBuildingId: null,
+  interiorPlayerX: 200,
+  interiorCameraX: 0,
+  interiorFacing: 1,
+  interiorWalking: false,
+
+  // New mechanics
+  factoryOwned: false,
+  factoryAutomation: 0,        // 0..3
+  factoryAccumulated: 0,        // pending passive income
+  stockShares: { frank: 0, bun: 0, kraft: 0 },
+  stockPrices: { frank: 200, bun: 300, kraft: 500 },
+  educationLevel: 0,            // 0=none, 1=class taken, 2=MBA
+  ownsMansion: false,
+  sick: false,
+};
+
+// ---------- CAREER LADDER ----------
+const CAREERS = [
+  { title: 'Unemployed Wiener',  xpToNext: 0,    pay: 0,    outfit: 'plain' },
+  { title: 'Street Cart Vendor', xpToNext: 30,   pay: 8,    outfit: 'plain' },
+  { title: 'Office Intern',      xpToNext: 60,   pay: 18,   outfit: 'tie' },
+  { title: 'Junior Frankfurter', xpToNext: 120,  pay: 35,   outfit: 'tie' },
+  { title: 'Sales Associate',    xpToNext: 200,  pay: 60,   outfit: 'suit' },
+  { title: 'Manager Mustard',    xpToNext: 320,  pay: 100,  outfit: 'suit' },
+  { title: 'VP of Buns',         xpToNext: 500,  pay: 180,  outfit: 'suit' },
+  { title: 'Executive Wiener',   xpToNext: 750,  pay: 320,  outfit: 'tux' },
+  { title: 'CEO Frankfurter',    xpToNext: 1100, pay: 600,  outfit: 'tux' },
+  { title: 'Hot Dog Mogul',      xpToNext: 1600, pay: 1200, outfit: 'ceo' },
+  { title: 'Frankfurter Baron',  xpToNext: 2400, pay: 2500, outfit: 'ceo' },
+  { title: 'Wiener Tycoon',      xpToNext: Infinity, pay: 5000, outfit: 'ceo' },
+];
+
+// ---------- BUILDINGS (city overworld) ----------
+const BUILDING_DEFS = [
+  { id: 'home',       name: 'Tiny Apartment',     icon: '🏠', color: '#a87858', windows: [3,2], height: 200, x: 200 },
+  { id: 'cart',       name: "Frank's Hot Dog Cart", icon: '🌭', color: '#ff7a59', windows: [1,1], height: 100, x: 600 },
+  { id: 'diner',      name: "Mama's Diner",       icon: '🍔', color: '#d4584a', windows: [3,2], height: 220, x: 900 },
+  { id: 'gym',        name: 'Iron Bun Gym',       icon: '💪', color: '#5a7a8a', windows: [4,3], height: 280, x: 1300 },
+  { id: 'park',       name: 'Central Park',       icon: '🌳', color: '#4a7a3a', windows: [0,0], height: 80,  x: 1700 },
+  { id: 'office',     name: 'Mustard Corp Office', icon: '🏢', color: '#7a8aa0', windows: [4,5], height: 360, x: 2100 },
+  { id: 'bank',       name: 'First National Bun', icon: '🏦', color: '#cab87a', windows: [4,4], height: 320, x: 2550 },
+  { id: 'shop',       name: 'Dapper Dog Outfits', icon: '👔', color: '#9b6ab8', windows: [3,2], height: 240, x: 2950 },
+  { id: 'bar',        name: 'The Relish Lounge',  icon: '🍻', color: '#5a4080', windows: [3,2], height: 200, x: 3300 },
+  { id: 'university', name: 'Bun University',     icon: '🎓', color: '#8b5a8b', windows: [5,4], height: 340, x: 3700 },
+  { id: 'hospital',   name: 'Sausage General',    icon: '🏥', color: '#e8eef4', windows: [4,5], height: 360, x: 4150 },
+  { id: 'casino',     name: 'Lucky Frank Casino', icon: '🎰', color: '#5a1a1a', windows: [5,3], height: 280, x: 4600 },
+  { id: 'stocks',     name: 'Stock Exchange',     icon: '📈', color: '#1a3a4a', windows: [5,5], height: 380, x: 5050 },
+  { id: 'factory',    name: 'Hot Dog Factory',    icon: '🏭', color: '#5a5045', windows: [3,2], height: 260, x: 5550 },
+  { id: 'mansion',    name: 'Wiener Mansion',     icon: '🏰', color: '#6b3a65', windows: [6,4], height: 380, x: 6050 },
+  { id: 'tower',      name: 'Frankfurter Tower',  icon: '🗼', color: '#e8b04a', windows: [5,9], height: 520, x: 6650 },
+];
+
+const WORLD_WIDTH = 7400;
+
+// ---------- 3D BUILDING INTERIORS ----------
+// Each interior has a theme + decor + an array of stations.
+// Stations support a `cond` (visible only when true) and `disable` (greyed out).
+const BUILDING_INTERIORS = {
+  home: {
+    name: 'Tiny Apartment',
+    icon: '🏠',
+    theme: 'home',
+    subtitle: 'Home sweet hot dog home.',
+    decor: ['🪟', '🖼️', '🪴', '📺'],
+    width: 1500,
+    stations: () => [
+      { x: 250, icon: '🛌', label: 'Quick Nap', action: 'sleep_short' },
+      { x: 500, icon: '💤', label: 'Full Sleep', action: 'sleep_long' },
+      { x: 800, icon: '📺', label: 'Watch TV', action: 'tv' },
+      { x: 1100, icon: state.ownsApartment ? '🏘️' : '🏘️', label: state.ownsApartment ? 'Penthouse Owned' : 'Upgrade Penthouse', action: 'buy_apartment', price: '$2,000', priceClass: 'loss', disable: state.ownsApartment || state.money < 2000 },
+    ],
+  },
+  cart: {
+    name: "Frank's Hot Dog Cart",
+    icon: '🌭',
+    theme: 'cart',
+    subtitle: 'The grease-stained foundation of every empire.',
+    decor: ['🌭', '🥫', '🧂', '☂️'],
+    width: 1300,
+    stations: () => [
+      state.ownsCart
+        ? { x: 300, icon: '🔥', label: 'Work the Cart (1hr)', action: 'work_cart', price: '+$' + cartPay(), priceClass: 'gain' }
+        : { x: 300, icon: '💰', label: 'Buy the Cart', action: 'buy_cart', price: '$50', priceClass: 'loss', disable: state.money < 50 },
+      ...(state.ownsCart && state.careerLevel === 0
+        ? [{ x: 600, icon: '🎉', label: 'Become Vendor', action: 'start_vendor' }]
+        : []),
+      { x: 900, icon: '🌭', label: 'Eat a Hot Dog', action: 'eat_dog', price: '$3', priceClass: 'loss', disable: state.money < 3 },
+    ],
+  },
+  diner: {
+    name: "Mama's Diner",
+    icon: '🍔',
+    theme: 'diner',
+    subtitle: 'Greasy spoon. Comfort food. Refill that hunger.',
+    decor: ['🍔', '🍟', '🥤', '🥩'],
+    width: 1500,
+    stations: () => [
+      { x: 280, icon: '🍟', label: 'Fries', action: 'eat_snack', price: '$5', priceClass: 'loss', disable: state.money < 5 },
+      { x: 550, icon: '🍔', label: 'Burger Combo', action: 'eat_meal', price: '$15', priceClass: 'loss', disable: state.money < 15 },
+      { x: 850, icon: '🥩', label: 'Steak Dinner', action: 'eat_feast', price: '$45', priceClass: 'loss', disable: state.money < 45 },
+      { x: 1180, icon: '🍰', label: 'Birthday Cake', action: 'eat_cake', price: '$25', priceClass: 'loss', disable: state.money < 25 },
+    ],
+  },
+  gym: {
+    name: 'Iron Bun Gym',
+    icon: '💪',
+    theme: 'gym',
+    subtitle: 'Get those buns toned, your career fit.',
+    decor: ['🏋️', '🚴', '🥇', '♨️'],
+    width: 1500,
+    stations: () => [
+      { x: 280, icon: '🏋️', label: 'Workout (1hr)', action: 'workout', price: '$10', priceClass: 'loss', disable: state.money < 10 || state.energy < 20 },
+      { x: 600, icon: '🚴', label: 'Cardio (45min)', action: 'cardio', price: '$8', priceClass: 'loss', disable: state.money < 8 },
+      { x: 900, icon: '♨️', label: 'Sauna', action: 'sauna', price: '$8', priceClass: 'loss', disable: state.money < 8 },
+      { x: 1200, icon: '🧘', label: 'Yoga Class', action: 'yoga', price: '$12', priceClass: 'loss', disable: state.money < 12 },
+    ],
+  },
+  park: {
+    name: 'Central Park',
+    icon: '🌳',
+    theme: 'park',
+    subtitle: 'Fresh air, free entertainment.',
+    decor: ['🌳', '🌷', '🌳', '🌷'],
+    width: 1500,
+    stations: () => [
+      { x: 280, icon: '🚶', label: 'Take a Walk', action: 'walk_park' },
+      { x: 580, icon: '🐦', label: 'Feed the Birds', action: 'feed_birds', price: '$2', priceClass: 'loss', disable: state.money < 2 },
+      { x: 880, icon: '🥺', label: 'Beg for Change', action: 'beg' },
+      { x: 1180, icon: '🎨', label: 'Sell Art', action: 'sell_art', price: '+$' + (5 + state.careerLevel * 2), priceClass: 'gain' },
+    ],
+  },
+  office: {
+    name: 'Mustard Corp Office',
+    icon: '🏢',
+    theme: 'office',
+    subtitle: 'The cubicle farm. The corporate ladder. Your future.',
+    decor: ['💻', '☕', '📊', '🗄️'],
+    width: 1700,
+    stations: () => {
+      const canApply = !state.hasJob && state.careerLevel >= 1;
+      const list = [];
+      if (state.hasJob) {
+        list.push({ x: 280, icon: '💼', label: 'Do Some Work (2hrs)', action: 'work_office', price: '+$' + jobPay(), priceClass: 'gain' });
+        if (state.careerLevel < CAREERS.length - 1) {
+          list.push({
+            x: 600,
+            icon: '🚀',
+            label: state.xp >= CAREERS[state.careerLevel].xpToNext ? 'Ask for Promotion' : `Need ${CAREERS[state.careerLevel].xpToNext} XP`,
+            action: 'try_promote',
+            disable: state.xp < CAREERS[state.careerLevel].xpToNext,
+          });
+        }
+        list.push({ x: 950, icon: '🗣️', label: 'Attend Meeting', action: 'meeting' });
+        list.push({ x: 1280, icon: '☕', label: 'Coffee Break', action: 'coffee', price: '$5', priceClass: 'loss', disable: state.money < 5 });
+      } else {
+        list.push({
+          x: 600,
+          icon: '📄',
+          label: canApply ? 'Apply for Internship' : 'Be a vendor first',
+          action: 'apply_job',
+          disable: !canApply,
+        });
+      }
+      return list;
+    },
+  },
+  bank: {
+    name: 'First National Bun',
+    icon: '🏦',
+    theme: 'bank',
+    subtitle: 'Where money sleeps and grows.',
+    decor: ['💰', '🏦', '💵', '📊'],
+    width: 1500,
+    stations: () => [
+      { x: 280, icon: '📊', label: 'Invest $100', action: 'invest_100', price: '$100', priceClass: 'loss', disable: state.money < 100 },
+      { x: 580, icon: '💎', label: 'Invest $1,000', action: 'invest_1000', price: '$1,000', priceClass: 'loss', disable: state.money < 1000 },
+      { x: 880, icon: '🏦', label: 'Invest $10,000', action: 'invest_10k', price: '$10,000', priceClass: 'loss', disable: state.money < 10000 },
+      { x: 1180, icon: '💵', label: `Withdraw $${Math.floor(state.investments)}`, action: 'withdraw_all', price: '+$' + Math.floor(state.investments), priceClass: 'gain', disable: state.investments < 1 },
+    ],
+  },
+  shop: {
+    name: 'Dapper Dog Outfits',
+    icon: '👔',
+    theme: 'shop',
+    subtitle: 'Dress the part. Play the part. Slay the part.',
+    decor: ['👔', '🤵', '🎩', '💎'],
+    width: 1500,
+    stations: () => {
+      const has = (o) => ['tie', 'suit', 'tux', 'ceo'].indexOf(state.outfit) >= ['tie', 'suit', 'tux', 'ceo'].indexOf(o);
+      return [
+        { x: 280, icon: '👔', label: has('tie') ? 'Tie (Owned)' : 'Business Tie', action: 'buy_tie', price: has('tie') ? 'Owned' : '$50', priceClass: 'loss', disable: has('tie') || state.money < 50 },
+        { x: 580, icon: '🤵', label: has('suit') ? 'Suit (Owned)' : 'Power Suit', action: 'buy_suit', price: has('suit') ? 'Owned' : '$300', priceClass: 'loss', disable: has('suit') || state.money < 300 },
+        { x: 880, icon: '🎩', label: has('tux') ? 'Tuxedo (Owned)' : 'Tuxedo', action: 'buy_tux', price: has('tux') ? 'Owned' : '$1,200', priceClass: 'loss', disable: has('tux') || state.money < 1200 },
+        { x: 1180, icon: '💎', label: state.outfit === 'ceo' ? 'CEO (Owned)' : 'CEO Ensemble', action: 'buy_ceo', price: state.outfit === 'ceo' ? 'Owned' : '$5,000', priceClass: 'loss', disable: state.outfit === 'ceo' || state.money < 5000 },
+      ];
+    },
+  },
+  bar: {
+    name: 'The Relish Lounge',
+    icon: '🍻',
+    theme: 'bar',
+    subtitle: 'Where deals are made and dignity is lost.',
+    decor: ['🍻', '🎤', '🍷', '🎲'],
+    width: 1500,
+    stations: () => [
+      { x: 280, icon: '🍺', label: 'Have a Beer', action: 'drink_beer', price: '$8', priceClass: 'loss', disable: state.money < 8 },
+      { x: 600, icon: '🤝', label: 'Network with Suits', action: 'network', price: '$25', priceClass: 'loss', disable: state.money < 25 },
+      { x: 900, icon: '🎤', label: 'Sing Karaoke', action: 'karaoke', price: '$5', priceClass: 'loss', disable: state.money < 5 },
+      { x: 1200, icon: '🍷', label: 'Premium Wine', action: 'wine', price: '$50', priceClass: 'loss', disable: state.money < 50 },
+    ],
+  },
+  university: {
+    name: 'Bun University',
+    icon: '🎓',
+    theme: 'university',
+    subtitle: 'Education: the smart hot dog\'s investment.',
+    decor: ['📚', '🎓', '🔬', '🖋️'],
+    width: 1500,
+    stations: () => [
+      { x: 280, icon: '📚', label: 'Take a Class', action: 'take_class', price: '$100', priceClass: 'loss', disable: state.money < 100 },
+      { x: 600, icon: '🎓', label: state.educationLevel >= 2 ? 'MBA Earned' : 'Earn MBA', action: 'mba', price: state.educationLevel >= 2 ? 'Done' : '$1,500', priceClass: 'loss', disable: state.educationLevel >= 2 || state.money < 1500 },
+      { x: 950, icon: '🔬', label: 'Research Project', action: 'research', price: '$300', priceClass: 'loss', disable: state.money < 300 },
+      { x: 1250, icon: '📖', label: 'Library Study (free)', action: 'study' },
+    ],
+  },
+  hospital: {
+    name: 'Sausage General Hospital',
+    icon: '🏥',
+    theme: 'hospital',
+    subtitle: 'Patch yourself up. Hot dogs need maintenance too.',
+    decor: ['💊', '🩺', '🚑', '🩹'],
+    width: 1400,
+    stations: () => [
+      { x: 280, icon: '🩺', label: 'Health Checkup', action: 'checkup', price: '$50', priceClass: 'loss', disable: state.money < 50 },
+      { x: 580, icon: '💊', label: 'Buy Medicine', action: 'medicine', price: '$80', priceClass: 'loss', disable: state.money < 80 },
+      { x: 880, icon: '🚑', label: 'Full Treatment', action: 'full_treatment', price: '$300', priceClass: 'loss', disable: state.money < 300 },
+      { x: 1180, icon: '💉', label: 'Energy Booster', action: 'booster', price: '$120', priceClass: 'loss', disable: state.money < 120 },
+    ],
+  },
+  casino: {
+    name: 'Lucky Frank Casino',
+    icon: '🎰',
+    theme: 'casino',
+    subtitle: 'The house always wins. But sometimes you do too.',
+    decor: ['🎰', '🃏', '🎲', '💎'],
+    width: 1500,
+    stations: () => [
+      { x: 280, icon: '🎰', label: 'Slot Machine', action: 'slots', price: '$10', priceClass: 'loss', disable: state.money < 10 },
+      { x: 580, icon: '🃏', label: 'Blackjack', action: 'blackjack', price: '$50', priceClass: 'loss', disable: state.money < 50 },
+      { x: 880, icon: '🎲', label: 'Roulette', action: 'roulette', price: '$100', priceClass: 'loss', disable: state.money < 100 },
+      { x: 1200, icon: '💎', label: 'High Roller', action: 'high_roller', price: '$1,000', priceClass: 'loss', disable: state.money < 1000 },
+    ],
+  },
+  stocks: {
+    name: 'Stock Exchange',
+    icon: '📈',
+    theme: 'stocks',
+    subtitle: 'Trade Frank Inc, Bun Co, and Kraft & Co stock.',
+    decor: ['📈', '📉', '💹', '🐂'],
+    width: 1700,
+    stations: () => [
+      { x: 280, icon: '🌭', label: `Frank Inc (${state.stockShares.frank}sh) $${Math.floor(state.stockPrices.frank)}`, action: 'buy_frank', price: '$' + Math.floor(state.stockPrices.frank), priceClass: 'loss', disable: state.money < state.stockPrices.frank },
+      { x: 580, icon: '🍞', label: `Bun Co (${state.stockShares.bun}sh) $${Math.floor(state.stockPrices.bun)}`, action: 'buy_bun', price: '$' + Math.floor(state.stockPrices.bun), priceClass: 'loss', disable: state.money < state.stockPrices.bun },
+      { x: 880, icon: '🧀', label: `Kraft & Co (${state.stockShares.kraft}sh) $${Math.floor(state.stockPrices.kraft)}`, action: 'buy_kraft', price: '$' + Math.floor(state.stockPrices.kraft), priceClass: 'loss', disable: state.money < state.stockPrices.kraft },
+      { x: 1280, icon: '💰', label: 'Sell ALL Stocks', action: 'sell_stocks', price: '+$' + Math.floor(stockPortfolioValue()), priceClass: 'gain', disable: stockPortfolioValue() < 1 },
+    ],
+  },
+  factory: {
+    name: 'Hot Dog Factory',
+    icon: '🏭',
+    theme: 'factory',
+    subtitle: 'Mass-produce franks. Generate passive income.',
+    decor: ['🏭', '⚙️', '🌭', '🤖'],
+    width: 1500,
+    stations: () => {
+      const list = [];
+      if (!state.factoryOwned) {
+        list.push({ x: 600, icon: '🏭', label: 'Buy the Factory', action: 'buy_factory', price: '$8,000', priceClass: 'loss', disable: state.money < 8000 });
+      } else {
+        list.push({ x: 280, icon: '👷', label: 'Run a Shift', action: 'factory_shift', price: '+$' + factoryShiftPay(), priceClass: 'gain' });
+        list.push({ x: 580, icon: '💰', label: `Collect $${Math.floor(state.factoryAccumulated)}`, action: 'factory_collect', price: '+$' + Math.floor(state.factoryAccumulated), priceClass: 'gain', disable: state.factoryAccumulated < 1 });
+        list.push({
+          x: 880,
+          icon: '🤖',
+          label: state.factoryAutomation >= 3 ? 'MAX Automation' : `Automation Lvl ${state.factoryAutomation + 1}`,
+          action: 'upgrade_automation',
+          price: state.factoryAutomation >= 3 ? 'Maxed' : '$' + (5000 * (state.factoryAutomation + 1)).toLocaleString(),
+          priceClass: 'loss',
+          disable: state.factoryAutomation >= 3 || state.money < 5000 * (state.factoryAutomation + 1),
+        });
+        list.push({ x: 1200, icon: '🚛', label: 'Big Distribution Deal', action: 'big_deal', price: '$2,000', priceClass: 'loss', disable: state.money < 2000 });
+      }
+      return list;
+    },
+  },
+  mansion: {
+    name: 'Wiener Mansion',
+    icon: '🏰',
+    theme: 'mansion',
+    subtitle: 'The luxury home only the truly successful can afford.',
+    decor: ['🏰', '🛏️', '🏊', '🍷'],
+    width: 1700,
+    stations: () => {
+      if (!state.ownsMansion) {
+        return [{
+          x: 700, icon: '🏰', label: 'Buy the Mansion', action: 'buy_mansion',
+          price: '$25,000', priceClass: 'loss', disable: state.money < 25000,
+        }];
+      }
+      return [
+        { x: 280, icon: '🛏️', label: 'King Sleep', action: 'mansion_sleep' },
+        { x: 580, icon: '🏊', label: 'Pool Day', action: 'pool' },
+        { x: 880, icon: '🍷', label: 'Wine Cellar', action: 'wine_cellar' },
+        { x: 1200, icon: '🥂', label: 'Throw a Party', action: 'party', price: '$1,000', priceClass: 'loss', disable: state.money < 1000 },
+        { x: 1500, icon: '🎺', label: 'Hire Butler', action: 'butler', price: '$2,000', priceClass: 'loss', disable: state.money < 2000 },
+      ];
+    },
+  },
+  tower: {
+    name: 'Frankfurter Tower',
+    icon: '🗼',
+    theme: 'tower',
+    subtitle: 'The pinnacle. Only moguls allowed.',
+    decor: ['🏆', '👑', '💎', '🥇'],
+    width: 1300,
+    stations: () => {
+      const reqLvl = 9; // need to be Hot Dog Mogul
+      if (state.careerLevel >= reqLvl) {
+        return [{ x: 650, icon: '🏆', label: 'Claim Mogul Status', action: 'win', price: 'WIN!', priceClass: 'gain' }];
+      }
+      return [{ x: 650, icon: '🚪', label: 'Sorry, Moguls only', action: 'leave', disable: false }];
+    },
+  },
+};
+
+// ---------- DOM REFS ----------
+const $ = (id) => document.getElementById(id);
+const elIntro = $('intro');
+const elGame = $('game');
+const elWorld = $('world');
+const elCity = $('city');
+const elPlayer = $('player');
+const elNpcs = $('npcs');
+const elNotifs = $('notifications');
+const elModal = $('modal');
+const elModalBody = $('modalBody');
+const elParticles = $('particles');
+const elOutfit = $('outfit');
+const elPupilL = $('pupilL');
+const elPupilR = $('pupilR');
+const elEnterPrompt = $('enterPrompt');
+const elInterior = $('interior');
+const elInteriorRoom = $('interiorRoom');
+const elBackWall = $('backWall');
+const elFloor3d = $('floor3d');
+const elStations = $('stations');
+const elInteriorPlayer = $('interiorPlayer');
+const elInteriorTitle = $('interiorTitle');
+const elInteriorSubtitle = $('interiorSubtitle');
+const elWallDecor = $('wallDecor');
+const elInteriorPrompt = $('interiorPrompt');
+const elOutfitInt = $('outfitInt');
+
+// ---------- SETUP ----------
+function init() {
+  $('startBtn').addEventListener('click', () => startGame(false));
+  $('modalClose').addEventListener('click', closeModal);
+  $('restartBtn').addEventListener('click', () => {
+    clearSave();
+    location.reload();
+  });
+  $('exitBtn').addEventListener('click', exitInterior);
+  $('continueBtn').addEventListener('click', () => startGame(true));
+  $('leaderboardBtn').addEventListener('click', () => openLeaderboard('global'));
+  $('viewLbBtn').addEventListener('click', () => openLeaderboard('global'));
+  $('lbClose').addEventListener('click', closeLeaderboard);
+  document.querySelectorAll('.lb-tab').forEach(t => {
+    t.addEventListener('click', () => openLeaderboard(t.dataset.tab));
+  });
+  $('submitScoreBtn').addEventListener('click', submitScore);
+  $('manualSaveBtn').addEventListener('click', () => { saveGame(); showSaveToast(); });
+  $('resetGameBtn').addEventListener('click', () => {
+    if (confirm('Reset and start a brand new game? Your save will be deleted.')) {
+      clearSave();
+      location.reload();
+    }
+  });
+
+  // Show "Continue" if a save exists
+  if (hasSave()) $('continueBtn').classList.remove('hidden');
+
+  // Pre-fill player name from past plays
+  const savedName = localStorage.getItem(PLAYER_NAME_KEY);
+  if (savedName) $('winName').value = savedName;
+
+  setupInput();
+}
+
+function startGame(continueGame) {
+  elIntro.style.display = 'none';
+  elGame.classList.remove('game-hidden');
+  $('saveControls').classList.remove('hidden');
+
+  let resumed = false;
+  if (continueGame && hasSave()) {
+    resumed = loadGame();
+  }
+
+  buildCity();
+  spawnNpcs();
+  renderHUD();
+  renderOutfit();
+  elCity.style.width = WORLD_WIDTH + 'px';
+
+  if (resumed) {
+    notify(`Welcome back, ${CAREERS[state.careerLevel].title}! Day ${state.day} resumed.`, 'epic');
+  } else {
+    notify('Welcome to the city! 🌭 Walk to the orange cart and press W to enter.', 'epic');
+  }
+
+  // Autosave every 10 seconds
+  setInterval(() => { if (!state.hasWon) saveGame(); }, 10000);
+  // Save on tab close
+  window.addEventListener('beforeunload', () => { if (!state.hasWon) saveGame(); });
+
+  requestAnimationFrame(loop);
+}
+
+// ---------- CITY GENERATION ----------
+function buildCity() {
+  elCity.innerHTML = '';
+  BUILDING_DEFS.forEach(def => {
+    const b = document.createElement('div');
+    b.className = 'building';
+    b.dataset.id = def.id;
+    b.style.left = def.x + 'px';
+    b.style.position = 'absolute';
+    b.style.background = `linear-gradient(180deg, ${shade(def.color, 1.1)}, ${shade(def.color, 0.6)})`;
+    b.style.height = def.height + 'px';
+    const w = 140 + (def.windows[0] * 8);
+    b.style.width = w + 'px';
+
+    const name = document.createElement('div');
+    name.className = 'building-name';
+    name.textContent = def.icon + ' ' + def.name;
+    b.appendChild(name);
+
+    const ic = document.createElement('div');
+    ic.className = 'building-icon';
+    ic.textContent = def.icon;
+    b.appendChild(ic);
+
+    if (def.windows[0] > 0) {
+      const winGrid = document.createElement('div');
+      winGrid.className = 'windows';
+      winGrid.style.gridTemplateColumns = `repeat(${def.windows[0]}, 1fr)`;
+      const total = def.windows[0] * def.windows[1];
+      for (let i = 0; i < total; i++) {
+        const win = document.createElement('div');
+        win.className = 'window';
+        win.style.height = '14px';
+        if (Math.random() < 0.3) win.classList.add('dark');
+        winGrid.appendChild(win);
+      }
+      b.appendChild(winGrid);
+    }
+
+    if (def.id !== 'park') {
+      const door = document.createElement('div');
+      door.className = 'door';
+      b.appendChild(door);
+    } else {
+      // Park gets trees instead
+      b.style.background = `linear-gradient(180deg, #6ba84a, #4a7a3a)`;
+      for (let i = 0; i < 3; i++) {
+        const tree = document.createElement('div');
+        tree.style.cssText = `position:absolute;bottom:0;left:${i*40+10}px;font-size:48px;`;
+        tree.textContent = '🌳';
+        b.appendChild(tree);
+      }
+    }
+
+    elCity.appendChild(b);
+  });
+}
+
+function shade(hex, factor) {
+  const c = parseInt(hex.slice(1), 16);
+  let r = Math.min(255, Math.floor(((c >> 16) & 0xff) * factor));
+  let g = Math.min(255, Math.floor(((c >> 8) & 0xff) * factor));
+  let b = Math.min(255, Math.floor((c & 0xff) * factor));
+  return `rgb(${r},${g},${b})`;
+}
+
+// ---------- NPC GENERATION ----------
+const NPC_EMOJIS = ['🚶', '🚶‍♀️', '🐕', '🐈', '🚴', '🐦', '🤵', '👮', '🐩', '🚓', '🛴'];
+function spawnNpcs() {
+  elNpcs.innerHTML = '';
+  elNpcs.style.width = WORLD_WIDTH + 'px';
+  const npcCount = 22;
+  for (let i = 0; i < npcCount; i++) {
+    const n = document.createElement('div');
+    n.className = 'npc';
+    n.textContent = NPC_EMOJIS[Math.floor(Math.random() * NPC_EMOJIS.length)];
+    n.dataset.x = Math.random() * WORLD_WIDTH;
+    n.dataset.speed = (Math.random() * 0.4 + 0.1) * (Math.random() < 0.5 ? -1 : 1);
+    n.dataset.bob = Math.random() * Math.PI * 2;
+    elNpcs.appendChild(n);
+  }
+}
+
+// ---------- INPUT ----------
+const keys = {};
+function setupInput() {
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    keys[k] = true;
+    if ([' ', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'w', 'a', 'd', 's', 'e'].includes(k)) {
+      e.preventDefault();
+    }
+    const wasOutside = !state.interiorBuildingId;
+    // Outside: W/Space/Up to enter building
+    if (wasOutside && (k === 'w' || k === ' ' || k === 'arrowup')) {
+      tryEnterBuilding();
+    }
+    // Inside: E only to use station (avoid same key triggering enter+use)
+    if (!wasOutside && k === 'e') {
+      tryUseStation();
+    }
+    // Escape: close modal or exit interior
+    if (e.key === 'Escape') {
+      if (!elModal.classList.contains('hidden')) {
+        closeModal();
+      } else if (state.interiorBuildingId) {
+        exitInterior();
+      }
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    keys[e.key.toLowerCase()] = false;
+  });
+}
+
+// ---------- GAME LOOP ----------
+let lastTime = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+  if (!state.hasWon) {
+    update(dt);
+    render();
+  }
+  requestAnimationFrame(loop);
+}
+
+function update(dt) {
+  const inputBlocked = !elModal.classList.contains('hidden');
+
+  if (state.interiorBuildingId) {
+    // ----- INTERIOR MOVEMENT -----
+    const speed = 280;
+    let move = 0;
+    if (!inputBlocked) {
+      if (keys['a'] || keys['arrowleft']) move -= 1;
+      if (keys['d'] || keys['arrowright']) move += 1;
+    }
+    const def = BUILDING_INTERIORS[state.interiorBuildingId];
+    state.interiorPlayerX += move * speed * dt;
+    state.interiorPlayerX = clamp(state.interiorPlayerX, 80, def.width - 80);
+    state.interiorWalking = move !== 0;
+    if (move !== 0) state.interiorFacing = move;
+
+    // Interior camera (only scrolls if room wider than viewport)
+    const vw = window.innerWidth;
+    if (def.width > vw) {
+      const targetCam = state.interiorPlayerX - vw / 2;
+      state.interiorCameraX += (targetCam - state.interiorCameraX) * Math.min(1, dt * 8);
+      state.interiorCameraX = clamp(state.interiorCameraX, 0, def.width - vw);
+    } else {
+      state.interiorCameraX = 0;
+    }
+    updateStationProximity();
+  } else {
+    // ----- OVERWORLD MOVEMENT -----
+    const speed = 240;
+    let move = 0;
+    if (!inputBlocked) {
+      if (keys['a'] || keys['arrowleft']) move -= 1;
+      if (keys['d'] || keys['arrowright']) move += 1;
+    }
+    state.playerWorldX += move * speed * dt;
+    state.playerWorldX = clamp(state.playerWorldX, 60, WORLD_WIDTH - 100);
+    state.walking = move !== 0;
+    if (move !== 0) state.facing = move;
+
+    const targetCam = state.playerWorldX - window.innerWidth / 2;
+    state.cameraX += (targetCam - state.cameraX) * Math.min(1, dt * 8);
+    state.cameraX = clamp(state.cameraX, 0, WORLD_WIDTH - window.innerWidth);
+
+    updateBuildingProximity();
+    updateNpcs(dt);
+  }
+
+  // Time progresses (each in-game day takes ~96 real seconds)
+  state.timeMin += dt * 15;
+  if (state.timeMin >= 1440) {
+    state.timeMin = 6 * 60;
+    state.day += 1;
+    onNewDay();
+  }
+
+  // Stat decay
+  const minPerSec = 15 / 60;
+  state.energy -= dt * (minPerSec * 0.08);
+  state.hunger -= dt * (minPerSec * 0.10);
+  state.mood -= dt * (minPerSec * 0.04);
+
+  state.energy = clamp(state.energy, 0, 100);
+  state.hunger = clamp(state.hunger, 0, 100);
+  state.mood = clamp(state.mood, 0, 100);
+
+  if (state.hunger < 5 && Math.random() < 0.005) state.mood -= 0.5;
+  if (state.energy < 5 && Math.random() < 0.005) state.mood -= 0.5;
+
+  // Investment passive growth (~4% per real minute)
+  if (state.investments > 0) {
+    state.investments += state.investments * 0.0007 * dt;
+  }
+
+  // Stock prices drift (random walk)
+  for (const k of ['frank', 'bun', 'kraft']) {
+    const drift = (Math.random() - 0.48) * 0.6;
+    state.stockPrices[k] = clamp(state.stockPrices[k] + drift, 30, 5000);
+  }
+
+  // Factory passive income
+  if (state.factoryOwned && state.factoryAutomation > 0) {
+    state.factoryAccumulated += state.factoryAutomation * 1.5 * dt;
+  }
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function render() {
+  // Overworld
+  elCity.style.transform = `translateX(${-state.cameraX}px)`;
+  elNpcs.style.transform = `translateX(${-state.cameraX}px)`;
+  elPlayer.style.left = (state.playerWorldX - state.cameraX) + 'px';
+  elPlayer.style.transform = 'translateX(-50%)';
+  elPlayer.classList.toggle('facing-left', state.facing < 0);
+  elPlayer.classList.toggle('walking', state.walking);
+
+  // Interior
+  if (state.interiorBuildingId) {
+    elBackWall.style.transform = `translateZ(-200px) translateX(${-state.interiorCameraX}px)`;
+    elFloor3d.style.transform = `translateZ(-200px) translateX(${-state.interiorCameraX}px) rotateX(72deg)`;
+    elStations.style.transform = `translateX(${-state.interiorCameraX}px)`;
+    elInteriorPlayer.style.left = (state.interiorPlayerX - state.interiorCameraX) + 'px';
+    elInteriorPlayer.classList.toggle('facing-left', state.interiorFacing < 0);
+    elInteriorPlayer.classList.toggle('walking', state.interiorWalking);
+  }
+
+  renderHUD();
+
+  // Day/night visuals
+  const hour = state.timeMin / 60;
+  let mode = 'day';
+  if (hour < 6 || hour >= 20) mode = 'night';
+  else if (hour >= 17) mode = 'evening';
+  elWorld.classList.toggle('night', mode === 'night');
+  elWorld.classList.toggle('evening', mode === 'evening');
+}
+
+function renderHUD() {
+  $('money').textContent = Math.floor(state.money).toLocaleString();
+  setBar('energyBar', state.energy);
+  setBar('hungerBar', state.hunger);
+  setBar('moodBar', state.mood);
+
+  const career = CAREERS[state.careerLevel];
+  $('careerTitle').textContent = career.title;
+  $('careerLevel').textContent = 'Lvl ' + (state.careerLevel + 1);
+  const next = career.xpToNext;
+  const prev = state.careerLevel > 0 ? CAREERS[state.careerLevel - 1].xpToNext : 0;
+  const pct = next === Infinity ? 100 : ((state.xp - prev) / (next - prev)) * 100;
+  $('xpBar').style.width = clamp(pct, 0, 100) + '%';
+
+  $('dayCount').textContent = 'Day ' + state.day;
+  const hr = Math.floor(state.timeMin / 60);
+  const min = Math.floor(state.timeMin % 60);
+  const ampm = hr >= 12 ? 'PM' : 'AM';
+  const h12 = ((hr + 11) % 12) + 1;
+  let icon = '☀️';
+  if (hr < 6 || hr >= 20) icon = '🌙';
+  else if (hr < 11) icon = '🌅';
+  else if (hr >= 17) icon = '🌇';
+  $('timeOfDay').textContent = `${icon} ${h12}:${min.toString().padStart(2,'0')} ${ampm}`;
+}
+
+function setBar(id, val) {
+  const el = $(id);
+  el.style.width = val + '%';
+  el.classList.toggle('warn', val < 20);
+}
+
+// ---------- BUILDING PROXIMITY ----------
+let nearestBuilding = null;
+function updateBuildingProximity() {
+  let near = null;
+  let bestDist = 130;
+  BUILDING_DEFS.forEach(def => {
+    const w = 140 + (def.windows[0] * 8);
+    const cx = def.x + w / 2;
+    const d = Math.abs(cx - state.playerWorldX);
+    if (d < bestDist) {
+      bestDist = d;
+      near = def;
+    }
+  });
+
+  if (near !== nearestBuilding) {
+    document.querySelectorAll('.building.near').forEach(b => b.classList.remove('near'));
+    if (near) {
+      const el = document.querySelector(`.building[data-id="${near.id}"]`);
+      if (el) el.classList.add('near');
+    }
+    nearestBuilding = near;
+  }
+
+  elEnterPrompt.classList.toggle('hidden', !near || !!state.interiorBuildingId);
+}
+
+function tryEnterBuilding() {
+  if (!nearestBuilding) return;
+  if (BUILDING_INTERIORS[nearestBuilding.id]) {
+    enterInterior(nearestBuilding.id);
+  }
+}
+
+// ---------- NPCs ----------
+function updateNpcs(dt) {
+  document.querySelectorAll('.npc').forEach(n => {
+    let x = parseFloat(n.dataset.x);
+    let speed = parseFloat(n.dataset.speed);
+    let bob = parseFloat(n.dataset.bob);
+    x += speed * dt * 60;
+    bob += dt * 8;
+    if (x < -100) x = WORLD_WIDTH + 100;
+    if (x > WORLD_WIDTH + 100) x = -100;
+    n.dataset.x = x;
+    n.dataset.bob = bob;
+    n.style.left = x + 'px';
+    n.style.transform = `translateY(${Math.sin(bob) * 3}px) scaleX(${speed > 0 ? 1 : -1})`;
+  });
+}
+
+// ---------- BUILDING INTERACTIONS (modal-only popups) ----------
+function closeModal() {
+  elModal.classList.add('hidden');
+}
+
+function showModal(html) {
+  elModalBody.innerHTML = html;
+  elModal.classList.remove('hidden');
+  elModalBody.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => handleAction(btn.dataset.action, btn));
+  });
+}
+
+// ---------- 3D INTERIOR SYSTEM ----------
+let nearestStation = null;
+let currentStations = [];
+
+function enterInterior(buildingId) {
+  const def = BUILDING_INTERIORS[buildingId];
+  if (!def) return;
+  state.interiorBuildingId = buildingId;
+  state.interiorPlayerX = 150;
+  state.interiorCameraX = 0;
+  state.interiorFacing = 1;
+  nearestStation = null;
+
+  // Apply theme
+  elInteriorRoom.className = 'interior-room theme-' + def.theme;
+  // Set room widths for backdrop & floor
+  elBackWall.style.width = def.width + 'px';
+  elFloor3d.style.width = def.width + 'px';
+  elStations.style.width = def.width + 'px';
+
+  // Title + decor
+  elInteriorTitle.textContent = def.icon + '  ' + def.name;
+  elInteriorSubtitle.textContent = def.subtitle;
+  elWallDecor.innerHTML = def.decor.map(d => `<span>${d}</span>`).join('');
+
+  // Refresh outfit on interior player too
+  renderOutfit();
+
+  // Stations
+  refreshInterior();
+
+  // Show
+  elInterior.classList.remove('hidden');
+}
+
+function exitInterior() {
+  state.interiorBuildingId = null;
+  nearestStation = null;
+  currentStations = [];
+  elInterior.classList.add('hidden');
+}
+
+function refreshInterior() {
+  if (!state.interiorBuildingId) return;
+  const def = BUILDING_INTERIORS[state.interiorBuildingId];
+  currentStations = def.stations();
+  elStations.innerHTML = currentStations.map((s, i) => `
+    <div class="station-3d ${s.disable ? 'disabled' : ''}" data-idx="${i}" style="left: ${s.x}px;">
+      ${s.price ? `<div class="station-price ${s.priceClass || ''}">${s.price}</div>` : ''}
+      <div class="station-icon">${s.icon}</div>
+      <div class="station-pedestal"></div>
+      <div class="station-label">${s.label}</div>
+    </div>
+  `).join('');
+  // Click handlers
+  elStations.querySelectorAll('.station-3d').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.idx);
+      const s = currentStations[idx];
+      if (!s || s.disable) return;
+      handleAction(s.action);
+    });
+  });
+}
+
+function updateStationProximity() {
+  if (!state.interiorBuildingId) return;
+  let near = null;
+  let bestDist = 80;
+  let nearIdx = -1;
+  currentStations.forEach((s, i) => {
+    if (s.disable) return;
+    const d = Math.abs(s.x - state.interiorPlayerX);
+    if (d < bestDist) {
+      bestDist = d;
+      near = s;
+      nearIdx = i;
+    }
+  });
+
+  if (near !== nearestStation) {
+    elStations.querySelectorAll('.station-3d').forEach(el => el.classList.remove('near'));
+    if (nearIdx >= 0) {
+      const el = elStations.querySelector(`.station-3d[data-idx="${nearIdx}"]`);
+      if (el) el.classList.add('near');
+    }
+    nearestStation = near;
+  }
+
+  if (near) {
+    elInteriorPrompt.classList.remove('hidden');
+    elInteriorPrompt.style.left = (near.x - state.interiorCameraX) + 'px';
+    elInteriorPrompt.innerHTML = `Press <kbd>E</kbd> ${near.label}`;
+  } else {
+    elInteriorPrompt.classList.add('hidden');
+  }
+}
+
+function tryUseStation() {
+  if (!nearestStation || nearestStation.disable) return;
+  handleAction(nearestStation.action);
+}
+
+// ---------- ACTIONS ----------
+function handleAction(action, btn) {
+  switch (action) {
+    case 'sleep_short':
+      advanceTime(60);
+      changeStat('energy', 30);
+      changeStat('hunger', -10);
+      notify('You took a quick nap. Refreshed!', 'good');
+      reopenCurrent();
+      break;
+    case 'sleep_long':
+      const restMin = state.timeMin > 6*60 ? (24*60 - state.timeMin) + 6*60 : (6*60 - state.timeMin);
+      advanceTime(restMin);
+      state.energy = 100;
+      changeStat('hunger', -25);
+      changeStat('mood', state.ownsApartment ? 25 : 10);
+      notify('You slept like a log. New day!', 'good');
+      reopenCurrent();
+      break;
+    case 'tv':
+      advanceTime(60);
+      changeStat('mood', 15);
+      changeStat('energy', -10);
+      notify('Caught up on Sausage News Network.', 'good');
+      reopenCurrent();
+      break;
+    case 'buy_apartment':
+      if (!spend(2000)) return;
+      state.ownsApartment = true;
+      notify('You upgraded to a penthouse! 🏙️', 'epic');
+      reopenCurrent();
+      break;
+
+    case 'buy_cart':
+      if (!spend(50)) return;
+      state.ownsCart = true;
+      notify('You bought the cart! Time to hustle.', 'epic');
+      reopenCurrent();
+      break;
+    case 'start_vendor':
+      state.careerLevel = 1;
+      state.outfit = CAREERS[1].outfit;
+      renderOutfit();
+      notify('You are now a Street Cart Vendor! 🌭', 'epic');
+      gainXp(5);
+      reopenCurrent();
+      break;
+    case 'work_cart':
+      if (state.energy < 10) {
+        notify('Too tired! Get some rest first.', 'bad');
+        return;
+      }
+      advanceTime(60);
+      const cartE = cartPay();
+      earn(cartE);
+      changeStat('energy', -15);
+      changeStat('hunger', -10);
+      gainXp(8);
+      notify(`Sold hot dogs! +$${cartE}`, 'good');
+      spawnParticle(`+$${cartE}`, 'gain');
+      reopenCurrent();
+      break;
+    case 'eat_dog':
+      if (!spend(3)) return;
+      changeStat('hunger', 25);
+      changeStat('mood', -2);
+      notify('You ate one of your own kind. Yum?', 'bad');
+      reopenCurrent();
+      break;
+
+    case 'apply_job':
+      state.hasJob = true;
+      state.careerLevel = 2;
+      state.outfit = CAREERS[2].outfit;
+      renderOutfit();
+      notify('You got the internship! Welcome to corporate.', 'epic');
+      gainXp(10);
+      reopenCurrent();
+      break;
+    case 'work_office':
+      if (state.energy < 15) {
+        notify('You\'re falling asleep at your desk. Rest!', 'bad');
+        return;
+      }
+      advanceTime(120);
+      const pay = jobPay();
+      earn(pay);
+      changeStat('energy', -25);
+      changeStat('hunger', -15);
+      changeStat('mood', -8);
+      gainXp(20);
+      notify(`Worked hard. Earned $${pay}.`, 'good');
+      spawnParticle(`+$${pay}`, 'gain');
+      reopenCurrent();
+      break;
+    case 'try_promote':
+      const need = CAREERS[state.careerLevel].xpToNext;
+      if (state.xp >= need && state.careerLevel < CAREERS.length - 1) {
+        state.careerLevel += 1;
+        state.outfit = CAREERS[state.careerLevel].outfit;
+        renderOutfit();
+        notify(`PROMOTED to ${CAREERS[state.careerLevel].title}! 🎉`, 'epic');
+        spawnConfetti();
+      }
+      reopenCurrent();
+      break;
+    case 'meeting':
+      advanceTime(60);
+      changeStat('mood', -10);
+      gainXp(10);
+      notify('That meeting could have been an email.', 'bad');
+      reopenCurrent();
+      break;
+
+    case 'eat_snack':
+      if (!spend(5)) return;
+      changeStat('hunger', 15);
+      reopenCurrent();
+      break;
+    case 'eat_meal':
+      if (!spend(15)) return;
+      changeStat('hunger', 45);
+      changeStat('mood', 10);
+      notify('That hit the spot.', 'good');
+      reopenCurrent();
+      break;
+    case 'eat_feast':
+      if (!spend(45)) return;
+      changeStat('hunger', 80);
+      changeStat('mood', 25);
+      notify('Bougie steak dinner. Living large.', 'good');
+      reopenCurrent();
+      break;
+
+    case 'workout':
+      if (!spend(10)) return;
+      advanceTime(60);
+      changeStat('energy', 15);
+      changeStat('mood', 5);
+      changeStat('hunger', -15);
+      gainXp(5);
+      notify('Buns of steel acquired.', 'good');
+      reopenCurrent();
+      break;
+    case 'sauna':
+      if (!spend(8)) return;
+      advanceTime(45);
+      changeStat('mood', 30);
+      changeStat('hunger', -10);
+      reopenCurrent();
+      break;
+
+    case 'walk_park':
+      advanceTime(30);
+      changeStat('mood', 15);
+      changeStat('energy', -5);
+      reopenCurrent();
+      break;
+    case 'feed_birds':
+      if (!spend(2)) return;
+      changeStat('mood', 25);
+      reopenCurrent();
+      break;
+    case 'beg':
+      const begAmt = Math.floor(2 + Math.random() * 4);
+      earn(begAmt);
+      changeStat('mood', -8);
+      notify(`Got $${begAmt} in pity change.`, 'bad');
+      reopenCurrent();
+      break;
+
+    case 'invest_100':
+      if (!spend(100)) return;
+      state.investments += 100;
+      notify('Invested $100. Compound interest is magic.', 'good');
+      reopenCurrent();
+      break;
+    case 'invest_1000':
+      if (!spend(1000)) return;
+      state.investments += 1000;
+      notify('Invested $1,000. Big money moves.', 'epic');
+      reopenCurrent();
+      break;
+    case 'withdraw_all':
+      const w = Math.floor(state.investments);
+      earn(w);
+      state.investments = 0;
+      notify(`Cashed out $${w}!`, 'epic');
+      reopenCurrent();
+      break;
+
+    case 'buy_tie':
+      if (!spend(50)) return;
+      state.outfit = 'tie';
+      renderOutfit();
+      notify('Looking sharp.', 'good');
+      reopenCurrent();
+      break;
+    case 'buy_suit':
+      if (!spend(300)) return;
+      state.outfit = 'suit';
+      renderOutfit();
+      notify('Power moves only.', 'good');
+      reopenCurrent();
+      break;
+    case 'buy_tux':
+      if (!spend(1200)) return;
+      state.outfit = 'tux';
+      renderOutfit();
+      notify('007 vibes. Bond. Hot Dog Bond.', 'epic');
+      reopenCurrent();
+      break;
+    case 'buy_ceo':
+      if (!spend(5000)) return;
+      state.outfit = 'ceo';
+      renderOutfit();
+      notify('CEO ensemble equipped. The city knows your name.', 'epic');
+      reopenCurrent();
+      break;
+
+    case 'drink_beer':
+      if (!spend(8)) return;
+      advanceTime(45);
+      changeStat('mood', 20);
+      changeStat('energy', -5);
+      reopenCurrent();
+      break;
+    case 'network':
+      if (!spend(25)) return;
+      advanceTime(90);
+      gainXp(15);
+      changeStat('mood', 10);
+      notify('Made a connection. Could be useful.', 'good');
+      reopenCurrent();
+      break;
+    case 'karaoke':
+      if (!spend(5)) return;
+      advanceTime(60);
+      changeStat('mood', 40);
+      notify('You crushed "Sweet Caroline" 🎤', 'epic');
+      reopenCurrent();
+      break;
+
+    case 'win':
+      doWin();
+      break;
+    case 'leave':
+      closeModal();
+      exitInterior();
+      break;
+
+    // ----- NEW: DINER -----
+    case 'eat_cake':
+      if (!spend(25)) return;
+      changeStat('hunger', 30);
+      changeStat('mood', 35);
+      notify('🎂 You celebrated... yourself. Why not.', 'good');
+      reopenCurrent();
+      break;
+
+    // ----- NEW: GYM -----
+    case 'cardio':
+      if (!spend(8)) return;
+      advanceTime(45);
+      changeStat('energy', 10);
+      changeStat('hunger', -10);
+      gainXp(4);
+      notify('Your bun is now tighter than your schedule.', 'good');
+      reopenCurrent();
+      break;
+    case 'yoga':
+      if (!spend(12)) return;
+      advanceTime(60);
+      changeStat('mood', 25);
+      changeStat('energy', 5);
+      notify('Namaste, frankfurter.', 'good');
+      reopenCurrent();
+      break;
+
+    // ----- NEW: PARK -----
+    case 'sell_art':
+      const art = 5 + state.careerLevel * 2 + Math.floor(Math.random() * 8);
+      earn(art);
+      changeStat('mood', 8);
+      gainXp(3);
+      notify(`Sold a painting for $${art}!`, 'good');
+      spawnParticle(`+$${art}`, 'gain');
+      reopenCurrent();
+      break;
+
+    // ----- NEW: OFFICE -----
+    case 'coffee':
+      if (!spend(5)) return;
+      changeStat('energy', 25);
+      changeStat('mood', 5);
+      notify('☕ Caffeine acquired. Productivity unlocked.', 'good');
+      reopenCurrent();
+      break;
+
+    // ----- NEW: BANK -----
+    case 'invest_10k':
+      if (!spend(10000)) return;
+      state.investments += 10000;
+      notify('Invested $10,000! Compound interest, baby.', 'epic');
+      reopenCurrent();
+      break;
+
+    // ----- NEW: BAR -----
+    case 'wine':
+      if (!spend(50)) return;
+      advanceTime(60);
+      changeStat('mood', 35);
+      gainXp(5);
+      notify('Bouquet of mustard, hints of relish. Lovely.', 'good');
+      reopenCurrent();
+      break;
+
+    // ----- NEW: UNIVERSITY -----
+    case 'take_class':
+      if (!spend(100)) return;
+      advanceTime(120);
+      gainXp(50);
+      changeStat('energy', -15);
+      changeStat('mood', -5);
+      if (state.educationLevel < 1) state.educationLevel = 1;
+      notify('📚 Class completed! +50 XP', 'good');
+      reopenCurrent();
+      break;
+    case 'mba':
+      if (state.educationLevel >= 2) { reopenCurrent(); return; }
+      if (!spend(1500)) return;
+      advanceTime(180);
+      gainXp(200);
+      state.educationLevel = 2;
+      changeStat('energy', -30);
+      notify('🎓 MBA earned! Your career is supercharged.', 'epic');
+      spawnConfetti();
+      reopenCurrent();
+      break;
+    case 'research':
+      if (!spend(300)) return;
+      advanceTime(120);
+      gainXp(100);
+      changeStat('energy', -25);
+      notify('Published a paper on bun structural integrity!', 'good');
+      reopenCurrent();
+      break;
+    case 'study':
+      advanceTime(60);
+      gainXp(15);
+      changeStat('energy', -10);
+      notify('Quiet study time. +15 XP', 'good');
+      reopenCurrent();
+      break;
+
+    // ----- NEW: HOSPITAL -----
+    case 'checkup':
+      if (!spend(50)) return;
+      advanceTime(45);
+      changeStat('energy', 20);
+      changeStat('mood', 10);
+      state.sick = false;
+      notify('Doc says you\'re in great shape!', 'good');
+      reopenCurrent();
+      break;
+    case 'medicine':
+      if (!spend(80)) return;
+      changeStat('energy', 30);
+      state.sick = false;
+      notify('💊 Feeling better already.', 'good');
+      reopenCurrent();
+      break;
+    case 'full_treatment':
+      if (!spend(300)) return;
+      advanceTime(120);
+      state.energy = 100;
+      state.hunger = 100;
+      changeStat('mood', 30);
+      state.sick = false;
+      notify('🚑 Fully restored! Worth every penny.', 'epic');
+      reopenCurrent();
+      break;
+    case 'booster':
+      if (!spend(120)) return;
+      changeStat('energy', 50);
+      changeStat('mood', 10);
+      notify('💉 Energy through the roof!', 'good');
+      reopenCurrent();
+      break;
+
+    // ----- NEW: CASINO -----
+    case 'slots': {
+      if (!spend(10)) return;
+      advanceTime(15);
+      const r = Math.random();
+      let win = 0;
+      if (r < 0.55) win = 0;
+      else if (r < 0.85) win = 15;
+      else if (r < 0.97) win = 50;
+      else win = 200;
+      if (win > 0) { earn(win); spawnParticle(`+$${win}`, 'gain'); notify(`🎰 SLOTS! Won $${win}`, 'good'); }
+      else { notify('🎰 Slots... lost. House edge!', 'bad'); }
+      reopenCurrent();
+      break;
+    }
+    case 'blackjack': {
+      if (!spend(50)) return;
+      advanceTime(20);
+      const r = Math.random();
+      let win = 0;
+      if (r < 0.45) win = 0;
+      else if (r < 0.85) win = 100;
+      else win = 250;
+      if (win > 0) { earn(win); spawnParticle(`+$${win}`, 'gain'); notify(`🃏 21! Won $${win}`, 'good'); }
+      else { notify('🃏 Bust. Lost $50.', 'bad'); }
+      reopenCurrent();
+      break;
+    }
+    case 'roulette': {
+      if (!spend(100)) return;
+      advanceTime(20);
+      const r = Math.random();
+      let win = 0;
+      if (r < 0.50) win = 0;
+      else if (r < 0.92) win = 200;
+      else win = 700;
+      if (win > 0) { earn(win); spawnParticle(`+$${win}`, 'gain'); notify(`🎲 Roulette! Won $${win}`, 'good'); }
+      else { notify('🎲 Wheel went the wrong way.', 'bad'); }
+      reopenCurrent();
+      break;
+    }
+    case 'high_roller': {
+      if (!spend(1000)) return;
+      advanceTime(30);
+      const r = Math.random();
+      let win = 0;
+      if (r < 0.55) win = 0;
+      else if (r < 0.90) win = 2200;
+      else win = 8000;
+      if (win > 0) { earn(win); spawnParticle(`+$${win}`, 'epic'); notify(`💎 HIGH ROLLER WIN! +$${win}`, 'epic'); spawnConfetti(); }
+      else { notify('💎 High Roller... high losses. -$1,000', 'bad'); }
+      reopenCurrent();
+      break;
+    }
+
+    // ----- NEW: STOCKS -----
+    case 'buy_frank': buyStock('frank'); break;
+    case 'buy_bun':   buyStock('bun');   break;
+    case 'buy_kraft': buyStock('kraft'); break;
+    case 'sell_stocks': {
+      const total = Math.floor(stockPortfolioValue());
+      if (total <= 0) { reopenCurrent(); return; }
+      earn(total);
+      state.stockShares = { frank: 0, bun: 0, kraft: 0 };
+      spawnParticle(`+$${total}`, 'epic');
+      notify(`📈 Sold all stocks for $${total.toLocaleString()}!`, 'epic');
+      reopenCurrent();
+      break;
+    }
+
+    // ----- NEW: FACTORY -----
+    case 'buy_factory':
+      if (!spend(8000)) return;
+      state.factoryOwned = true;
+      notify('🏭 You bought the Hot Dog Factory! Time to scale.', 'epic');
+      spawnConfetti();
+      reopenCurrent();
+      break;
+    case 'factory_shift': {
+      if (state.energy < 20) { notify('Too tired for factory work!', 'bad'); return; }
+      advanceTime(180);
+      const pay = factoryShiftPay();
+      earn(pay);
+      changeStat('energy', -30);
+      changeStat('hunger', -20);
+      gainXp(25);
+      notify(`Ran a shift. Earned $${pay}.`, 'good');
+      spawnParticle(`+$${pay}`, 'gain');
+      reopenCurrent();
+      break;
+    }
+    case 'factory_collect': {
+      const amt = Math.floor(state.factoryAccumulated);
+      if (amt < 1) { reopenCurrent(); return; }
+      earn(amt);
+      state.factoryAccumulated = 0;
+      spawnParticle(`+$${amt}`, 'gain');
+      notify(`Collected $${amt} in passive income!`, 'good');
+      reopenCurrent();
+      break;
+    }
+    case 'upgrade_automation': {
+      if (state.factoryAutomation >= 3) { reopenCurrent(); return; }
+      const cost = 5000 * (state.factoryAutomation + 1);
+      if (!spend(cost)) return;
+      state.factoryAutomation += 1;
+      notify(`🤖 Automation Lvl ${state.factoryAutomation}! Passive income increased.`, 'epic');
+      spawnConfetti();
+      reopenCurrent();
+      break;
+    }
+    case 'big_deal': {
+      if (!spend(2000)) return;
+      advanceTime(60);
+      const profit = 4000 + Math.floor(Math.random() * 4000);
+      earn(profit);
+      gainXp(30);
+      notify(`🚛 Sealed a $${profit} distribution deal!`, 'epic');
+      spawnParticle(`+$${profit}`, 'epic');
+      reopenCurrent();
+      break;
+    }
+
+    // ----- NEW: MANSION -----
+    case 'buy_mansion':
+      if (!spend(25000)) return;
+      state.ownsMansion = true;
+      notify('🏰 You bought the Wiener Mansion!', 'epic');
+      spawnConfetti();
+      reopenCurrent();
+      break;
+    case 'mansion_sleep': {
+      const restMin = state.timeMin > 6*60 ? (24*60 - state.timeMin) + 6*60 : (6*60 - state.timeMin);
+      advanceTime(restMin);
+      state.energy = 100;
+      changeStat('mood', 40);
+      notify('Slept like royalty. Woke up powerful.', 'epic');
+      reopenCurrent();
+      break;
+    }
+    case 'pool':
+      advanceTime(60);
+      changeStat('mood', 35);
+      changeStat('energy', 10);
+      notify('🏊 Refreshing dip. The good life.', 'good');
+      reopenCurrent();
+      break;
+    case 'wine_cellar':
+      advanceTime(45);
+      changeStat('mood', 30);
+      gainXp(5);
+      notify('🍷 You sampled vintage relish wine.', 'good');
+      reopenCurrent();
+      break;
+    case 'party':
+      if (!spend(1000)) return;
+      advanceTime(180);
+      changeStat('mood', 60);
+      gainXp(40);
+      notify('🥂 Threw the party of the year!', 'epic');
+      spawnConfetti();
+      reopenCurrent();
+      break;
+    case 'butler':
+      if (!spend(2000)) return;
+      changeStat('mood', 25);
+      state.energy = 100;
+      state.hunger = 100;
+      notify('🎺 Jeeves restored your stats. Splendid.', 'epic');
+      reopenCurrent();
+      break;
+  }
+}
+
+function reopenCurrent() {
+  if (state.interiorBuildingId) refreshInterior();
+}
+
+// ---------- HELPERS ----------
+function spend(n) {
+  if (state.money < n) {
+    notify("You're broke! Can't afford that.", 'bad');
+    return false;
+  }
+  state.money -= n;
+  spawnParticle(`-$${n}`, 'loss');
+  return true;
+}
+
+function earn(n) {
+  state.money += n;
+  state.totalEarned += n;
+}
+
+function changeStat(stat, delta) {
+  state[stat] = clamp(state[stat] + delta, 0, 100);
+}
+
+function gainXp(amt) {
+  // Education boosts XP gain
+  const bonus = 1 + state.educationLevel * 0.25;
+  state.xp += amt * bonus;
+  // Auto-promote check
+  while (state.careerLevel < CAREERS.length - 1 && state.xp >= CAREERS[state.careerLevel].xpToNext) {
+    if (state.careerLevel === 1 && !state.hasJob) break;
+    state.careerLevel += 1;
+    state.outfit = CAREERS[state.careerLevel].outfit;
+    renderOutfit();
+    notify(`PROMOTED to ${CAREERS[state.careerLevel].title}! 🎉`, 'epic');
+    spawnConfetti();
+  }
+}
+
+function cartPay() {
+  return Math.floor(8 + Math.random() * 6 + state.careerLevel * 2);
+}
+
+function jobPay() {
+  const c = CAREERS[state.careerLevel];
+  const eduMultiplier = 1 + state.educationLevel * 0.15;
+  return Math.floor(c.pay * (0.85 + Math.random() * 0.3) * eduMultiplier);
+}
+
+function factoryShiftPay() {
+  return Math.floor(150 + state.careerLevel * 30 + state.factoryAutomation * 50 + Math.random() * 100);
+}
+
+function stockPortfolioValue() {
+  return state.stockShares.frank * state.stockPrices.frank
+    + state.stockShares.bun   * state.stockPrices.bun
+    + state.stockShares.kraft * state.stockPrices.kraft;
+}
+
+function buyStock(key) {
+  const price = Math.floor(state.stockPrices[key]);
+  if (!spend(price)) return;
+  state.stockShares[key] += 1;
+  // Buying causes a small price bump
+  state.stockPrices[key] *= 1.02;
+  notify(`Bought 1 ${key.toUpperCase()} share at $${price}.`, 'good');
+  reopenCurrent();
+}
+
+function advanceTime(minutes) {
+  state.timeMin += minutes;
+  while (state.timeMin >= 1440) {
+    state.timeMin -= 1440;
+    state.day += 1;
+    onNewDay();
+  }
+}
+
+function onNewDay() {
+  // Daily rent / costs
+  let rent = state.ownsMansion ? 500 : (state.ownsApartment ? 100 : 25);
+  if (state.money >= rent) {
+    state.money -= rent;
+    notify(`Daily rent: -$${rent}`, 'bad');
+  } else {
+    state.mood -= 20;
+    notify(`Couldn't pay rent! Mood crashed.`, 'bad');
+  }
+  // Random event
+  if (Math.random() < 0.5) randomEvent();
+}
+
+const EVENTS = [
+  { msg: 'You found $20 on the sidewalk!', do: () => { earn(20); spawnParticle('+$20', 'gain'); }, type: 'good' },
+  { msg: 'A pigeon stole your wallet. -$15', do: () => { state.money = Math.max(0, state.money - 15); spawnParticle('-$15', 'loss'); }, type: 'bad' },
+  { msg: 'A child smiled at you. Mood boosted!', do: () => { changeStat('mood', 15); }, type: 'good' },
+  { msg: 'You got rained on. Mood dropped.', do: () => { changeStat('mood', -15); }, type: 'bad' },
+  { msg: 'Investments paid out a dividend!', do: () => { const d = Math.floor(state.investments * 0.05); if (d > 0) { earn(d); spawnParticle(`+$${d}`, 'gain'); } }, type: 'good' },
+  { msg: 'Tax day! Lost 10% of your cash.', do: () => { const t = Math.floor(state.money * 0.1); state.money -= t; spawnParticle(`-$${t}`, 'loss'); }, type: 'bad' },
+  { msg: 'You got food poisoning! Visit the hospital.', do: () => { state.sick = true; changeStat('energy', -30); changeStat('mood', -15); }, type: 'bad' },
+  { msg: 'A stock you own surged!', do: () => {
+      const owned = Object.keys(state.stockShares).filter(k => state.stockShares[k] > 0);
+      if (owned.length === 0) return;
+      const pick = owned[Math.floor(Math.random() * owned.length)];
+      state.stockPrices[pick] *= 1.15;
+    }, type: 'good' },
+  { msg: 'A stock crashed!', do: () => {
+      const owned = Object.keys(state.stockShares).filter(k => state.stockShares[k] > 0);
+      if (owned.length === 0) return;
+      const pick = owned[Math.floor(Math.random() * owned.length)];
+      state.stockPrices[pick] *= 0.85;
+    }, type: 'bad' },
+  { msg: 'Your factory got featured in Bun Weekly!', do: () => { if (state.factoryOwned) { state.factoryAccumulated += 500; spawnParticle('+$500', 'gain'); } }, type: 'good' },
+  { msg: 'A celebrity ordered hot dogs from you!', do: () => { earn(150); spawnParticle('+$150', 'gain'); }, type: 'good' },
+];
+
+function randomEvent() {
+  const e = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+  e.do();
+  notify(e.msg, e.type);
+}
+
+// ---------- OUTFIT RENDERING ----------
+function renderOutfit() {
+  let svg = '';
+  switch (state.outfit) {
+    case 'tie':
+      svg = `<polygon points="50,75 47,82 53,82" fill="#1a3a8a"/>
+             <rect x="48" y="80" width="4" height="14" fill="#1a3a8a"/>`;
+      break;
+    case 'suit':
+      svg = `<rect x="32" y="78" width="36" height="22" fill="#1a1a2a" rx="4"/>
+             <polygon points="50,78 47,86 53,86" fill="#cc1a1a"/>
+             <rect x="48" y="84" width="4" height="14" fill="#cc1a1a"/>
+             <circle cx="38" cy="88" r="1.5" fill="#ffd23a"/>
+             <circle cx="38" cy="94" r="1.5" fill="#ffd23a"/>`;
+      break;
+    case 'tux':
+      svg = `<rect x="32" y="78" width="36" height="22" fill="#0a0a0f" rx="4"/>
+             <polygon points="32,78 50,90 68,78 68,86 50,98 32,86" fill="#fff"/>
+             <polygon points="50,80 47,87 53,87" fill="#0a0a0f"/>
+             <rect x="49" y="86" width="2" height="6" fill="#0a0a0f"/>`;
+      break;
+    case 'ceo':
+      svg = `<rect x="32" y="78" width="36" height="22" fill="#2a1a4a" rx="4"/>
+             <polygon points="32,78 50,90 68,78 68,86 50,98 32,86" fill="#ffd23a"/>
+             <polygon points="50,80 47,87 53,87" fill="#cc1a1a"/>
+             <rect x="49" y="86" width="2" height="6" fill="#cc1a1a"/>
+             <circle cx="50" cy="74" r="3" fill="#ffd23a" stroke="#000" stroke-width="0.5"/>
+             <text x="50" y="76" font-size="3" text-anchor="middle" fill="#000" font-weight="bold">$</text>`;
+      break;
+    default:
+      svg = '';
+  }
+  elOutfit.innerHTML = svg;
+  if (elOutfitInt) elOutfitInt.innerHTML = svg;
+}
+
+// ---------- NOTIFICATIONS / PARTICLES ----------
+function notify(msg, type = 'good') {
+  const n = document.createElement('div');
+  n.className = 'notif ' + type;
+  n.textContent = msg;
+  elNotifs.appendChild(n);
+  setTimeout(() => n.remove(), 4200);
+}
+
+function spawnParticle(text, cls = '') {
+  const p = document.createElement('div');
+  p.className = 'particle ' + cls;
+  p.textContent = text;
+  const playerEl = state.interiorBuildingId ? elInteriorPlayer : elPlayer;
+  const rect = playerEl.getBoundingClientRect();
+  // Append to body so it works in either scene
+  p.style.position = 'fixed';
+  p.style.left = (rect.left + rect.width / 2 - 20) + 'px';
+  p.style.top = (rect.top - 10) + 'px';
+  p.style.zIndex = '999';
+  document.body.appendChild(p);
+  setTimeout(() => p.remove(), 1500);
+}
+
+function spawnConfetti() {
+  const colors = ['#ffd23a', '#ff7a59', '#34d399', '#8b5cf6', '#3b82f6', '#ec4899'];
+  for (let i = 0; i < 60; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.background = colors[Math.floor(Math.random() * colors.length)];
+    c.style.animationDelay = (Math.random() * 0.5) + 's';
+    c.style.transform = `rotate(${Math.random() * 360}deg)`;
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 3500);
+  }
+}
+
+// ---------- WIN ----------
+function doWin() {
+  state.hasWon = true;
+  closeModal();
+  exitInterior();
+  clearSave();
+  $('winTitle').textContent = CAREERS[state.careerLevel].title;
+  $('winDays').textContent = state.day;
+  $('winMoney').textContent = networth().toLocaleString();
+  $('winScreen').classList.remove('hidden');
+  $('saveControls').classList.add('hidden');
+  $('submitScoreBtn').disabled = false;
+  $('winName').disabled = false;
+  $('submitStatus').textContent = '';
+  $('submitStatus').className = 'submit-status';
+  spawnConfetti();
+  setTimeout(spawnConfetti, 800);
+  setTimeout(spawnConfetti, 1600);
+}
+
+// ---------- SAVE / LOAD ----------
+function hasSave() {
+  try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; }
+}
+
+function saveGame() {
+  try {
+    const snapshot = {
+      v: 2,
+      ts: Date.now(),
+      // Persist primitive state only (skip transient interior fields)
+      money: state.money,
+      energy: state.energy,
+      hunger: state.hunger,
+      mood: state.mood,
+      xp: state.xp,
+      careerLevel: state.careerLevel,
+      day: state.day,
+      timeMin: state.timeMin,
+      playerWorldX: state.playerWorldX,
+      facing: state.facing,
+      hasJob: state.hasJob,
+      ownsCart: state.ownsCart,
+      ownsApartment: state.ownsApartment,
+      ownsMansion: state.ownsMansion,
+      investments: state.investments,
+      outfit: state.outfit,
+      totalEarned: state.totalEarned,
+      hasWon: state.hasWon,
+      factoryOwned: state.factoryOwned,
+      factoryAutomation: state.factoryAutomation,
+      factoryAccumulated: state.factoryAccumulated,
+      stockShares: state.stockShares,
+      stockPrices: state.stockPrices,
+      educationLevel: state.educationLevel,
+      sick: state.sick,
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
+  } catch (e) {
+    console.warn('Save failed:', e);
+  }
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (!s || typeof s !== 'object') return false;
+    Object.assign(state, s);
+    return true;
+  } catch (e) {
+    console.warn('Load failed:', e);
+    return false;
+  }
+}
+
+function clearSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch {}
+}
+
+function showSaveToast() {
+  const t = $('saveToast');
+  t.classList.remove('hidden');
+  clearTimeout(showSaveToast._t);
+  showSaveToast._t = setTimeout(() => t.classList.add('hidden'), 2100);
+}
+
+// ---------- LEADERBOARD ----------
+function networth() {
+  return Math.floor(state.money) + Math.floor(state.investments) + Math.floor(stockPortfolioValue());
+}
+
+async function fetchGlobalLeaderboard() {
+  if (!API_URL) throw new Error('No global API configured');
+  const r = await fetch(API_URL.replace(/\/+$/, '') + '/api/leaderboard', { method: 'GET' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return await r.json();
+}
+
+async function postGlobalScore(entry) {
+  if (!API_URL) throw new Error('No global API configured');
+  const r = await fetch(API_URL.replace(/\/+$/, '') + '/api/leaderboard', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return await r.json();
+}
+
+function getLocalLeaderboard() {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_LB_KEY) || '[]');
+  } catch { return []; }
+}
+
+function saveLocalLeaderboard(entry) {
+  const list = getLocalLeaderboard();
+  list.push({ ...entry, created_at: new Date().toISOString() });
+  list.sort((a, b) => a.days - b.days || b.networth - a.networth);
+  const trimmed = list.slice(0, 20);
+  try { localStorage.setItem(LOCAL_LB_KEY, JSON.stringify(trimmed)); } catch {}
+}
+
+function openLeaderboard(tab) {
+  document.querySelectorAll('.lb-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  $('leaderboardModal').classList.remove('hidden');
+  renderLeaderboard(tab);
+}
+
+function closeLeaderboard() {
+  $('leaderboardModal').classList.add('hidden');
+}
+
+async function renderLeaderboard(tab) {
+  const status = $('lbStatus');
+  const body = $('lbBody');
+  body.innerHTML = '';
+  if (tab === 'global') {
+    if (!API_URL) {
+      status.textContent = 'Global leaderboard not configured. Showing local instead.';
+      renderRows(getLocalLeaderboard());
+      return;
+    }
+    status.textContent = 'Loading global scores...';
+    try {
+      const list = await fetchGlobalLeaderboard();
+      status.textContent = list.length ? `Top ${list.length} from around the world` : '';
+      renderRows(list);
+    } catch (e) {
+      status.textContent = 'Could not reach global leaderboard. Showing local.';
+      renderRows(getLocalLeaderboard());
+    }
+  } else {
+    const list = getLocalLeaderboard();
+    status.textContent = list.length ? 'Your wins on this device' : '';
+    renderRows(list);
+  }
+}
+
+function renderRows(list) {
+  const body = $('lbBody');
+  if (!list || list.length === 0) {
+    body.innerHTML = '<tr><td colspan="5" class="lb-empty">No wins yet. Be the first frankfurter!</td></tr>';
+    return;
+  }
+  const medals = ['🥇', '🥈', '🥉'];
+  body.innerHTML = list.map((row, i) => `
+    <tr>
+      <td><span class="rank-medal">${medals[i] || (i + 1)}</span></td>
+      <td>${escapeHtml(row.name || 'Anon')}</td>
+      <td>${escapeHtml(row.career || '?')}</td>
+      <td>${row.days}</td>
+      <td>$${Number(row.networth).toLocaleString()}</td>
+    </tr>
+  `).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+async function submitScore() {
+  const nameInput = $('winName');
+  const status = $('submitStatus');
+  let name = (nameInput.value || '').trim().slice(0, 20);
+  if (!name) {
+    status.textContent = 'Enter a name first.';
+    status.className = 'submit-status err';
+    return;
+  }
+  localStorage.setItem(PLAYER_NAME_KEY, name);
+  const entry = {
+    name,
+    career: CAREERS[state.careerLevel].title,
+    days: state.day,
+    networth: networth(),
+  };
+  status.textContent = 'Submitting...';
+  status.className = 'submit-status';
+
+  // Always save locally
+  saveLocalLeaderboard(entry);
+
+  // Try global if configured
+  if (API_URL) {
+    try {
+      await postGlobalScore(entry);
+      status.textContent = '✓ Submitted to the global leaderboard!';
+      status.className = 'submit-status ok';
+    } catch (e) {
+      status.textContent = '⚠ Saved locally (global leaderboard offline).';
+      status.className = 'submit-status err';
+    }
+  } else {
+    status.textContent = '✓ Saved to local leaderboard.';
+    status.className = 'submit-status ok';
+  }
+  $('submitScoreBtn').disabled = true;
+  nameInput.disabled = true;
+}
+
+// ---------- BOOT ----------
+init();

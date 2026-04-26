@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hot Dog Tycoon — From Bun to Boardroom</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="intro" class="intro-screen">
+  <div class="intro-card">
+    <svg viewBox="0 0 200 100" class="intro-logo">
+      <defs>
+        <linearGradient id="bunGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f4c27a"/>
+          <stop offset="100%" stop-color="#c98842"/>
+        </linearGradient>
+        <linearGradient id="dogGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ff7a59"/>
+          <stop offset="100%" stop-color="#b53b22"/>
+        </linearGradient>
+      </defs>
+      <ellipse cx="100" cy="55" rx="80" ry="22" fill="url(#bunGrad)"/>
+      <ellipse cx="100" cy="48" rx="70" ry="14" fill="url(#dogGrad)"/>
+      <path d="M40 45 Q60 35, 80 45 T120 45 T160 45" stroke="#ffd23a" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </svg>
+    <h1>HOT DOG TYCOON</h1>
+    <p class="tagline">From Bun to Boardroom</p>
+    <p class="story">You're a hot dog with big dreams. Hustle in the city, climb the corporate ladder, and become the most successful frankfurter in finance.</p>
+    <div class="controls-help">
+      <strong>Controls:</strong>
+      <div><kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> — Walk around city</div>
+      <div><kbd>W</kbd> or <kbd>Space</kbd> — Enter building</div>
+      <div><kbd>E</kbd> — Interact with stations inside</div>
+      <div><kbd>ESC</kbd> — Exit building</div>
+    </div>
+    <div class="intro-buttons">
+      <button id="startBtn" class="big-btn">Start Hustling</button>
+      <button id="continueBtn" class="big-btn secondary hidden">Continue Save</button>
+      <button id="leaderboardBtn" class="big-btn secondary">🏆 Leaderboard</button>
+    </div>
+  </div>
+</div>
+
+<!-- Leaderboard modal -->
+<div id="leaderboardModal" class="lb-modal hidden">
+  <div class="lb-card">
+    <button class="lb-close" id="lbClose">×</button>
+    <h2>🏆 Hall of Frankfurters</h2>
+    <div class="lb-tabs">
+      <button class="lb-tab active" data-tab="global">🌍 Global</button>
+      <button class="lb-tab" data-tab="local">💻 Local</button>
+    </div>
+    <div id="lbStatus" class="lb-status">Loading...</div>
+    <table class="lb-table" id="lbTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th>Career</th>
+          <th>Days</th>
+          <th>Net Worth</th>
+        </tr>
+      </thead>
+      <tbody id="lbBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="game" class="game-hidden">
+
+  <!-- HUD -->
+  <header class="hud">
+    <div class="hud-left">
+      <div class="stat money">
+        <span class="stat-icon">$</span>
+        <span id="money">0</span>
+      </div>
+      <div class="stat-bar" title="Energy">
+        <div class="bar-label">⚡ Energy</div>
+        <div class="bar"><div id="energyBar" class="bar-fill energy"></div></div>
+      </div>
+      <div class="stat-bar" title="Hunger">
+        <div class="bar-label">🍔 Hunger</div>
+        <div class="bar"><div id="hungerBar" class="bar-fill hunger"></div></div>
+      </div>
+      <div class="stat-bar" title="Happiness">
+        <div class="bar-label">😊 Mood</div>
+        <div class="bar"><div id="moodBar" class="bar-fill mood"></div></div>
+      </div>
+    </div>
+    <div class="hud-center">
+      <div class="career-badge">
+        <span class="career-label">Career</span>
+        <span id="careerTitle">Unemployed Wiener</span>
+        <div class="xp-bar"><div id="xpBar" class="xp-fill"></div></div>
+        <span id="careerLevel" class="career-level">Lvl 1</span>
+      </div>
+    </div>
+    <div class="hud-right">
+      <div class="day-info">
+        <div id="dayCount">Day 1</div>
+        <div id="timeOfDay">🌅 Morning</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notifications -->
+  <div id="notifications" class="notifications"></div>
+
+  <!-- World -->
+  <main id="world" class="world">
+    <div id="sky" class="sky"></div>
+    <div id="stars" class="stars"></div>
+    <div id="sun" class="sun"></div>
+    <div id="moon" class="moon"></div>
+    <div class="clouds">
+      <div class="cloud c1"></div>
+      <div class="cloud c2"></div>
+      <div class="cloud c3"></div>
+    </div>
+
+    <!-- City strip - buildings -->
+    <div id="city" class="city">
+      <!-- buildings injected via JS -->
+    </div>
+
+    <!-- Sidewalk -->
+    <div class="sidewalk"></div>
+    <div class="road"></div>
+    <div class="road-lines"></div>
+
+    <!-- Player -->
+    <div id="player" class="player">
+      <div class="player-shadow"></div>
+      <svg viewBox="0 0 100 140" class="hotdog-svg">
+        <defs>
+          <linearGradient id="bunG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f4c27a"/>
+            <stop offset="100%" stop-color="#a96b2c"/>
+          </linearGradient>
+          <linearGradient id="dogG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ff7a59"/>
+            <stop offset="100%" stop-color="#a02e1a"/>
+          </linearGradient>
+        </defs>
+        <!-- Legs -->
+        <rect id="legL" x="32" y="98" width="10" height="22" rx="4" fill="#3b2719"/>
+        <rect id="legR" x="58" y="98" width="10" height="22" rx="4" fill="#3b2719"/>
+        <!-- Bun bottom -->
+        <ellipse cx="50" cy="80" rx="38" ry="14" fill="url(#bunG)"/>
+        <!-- Hot dog body -->
+        <ellipse cx="50" cy="65" rx="32" ry="22" fill="url(#dogG)"/>
+        <!-- Bun top -->
+        <ellipse cx="50" cy="50" rx="38" ry="14" fill="url(#bunG)"/>
+        <!-- Mustard -->
+        <path d="M20 50 Q35 38, 50 50 T80 50" stroke="#ffd23a" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <!-- Outfit overlay (changes with career) -->
+        <g id="outfit"></g>
+        <!-- Eyes -->
+        <circle cx="40" cy="62" r="4" fill="#fff"/>
+        <circle cx="60" cy="62" r="4" fill="#fff"/>
+        <circle id="pupilL" cx="41" cy="63" r="2" fill="#1a1a1a"/>
+        <circle id="pupilR" cx="61" cy="63" r="2" fill="#1a1a1a"/>
+        <!-- Smile -->
+        <path d="M42 72 Q50 78, 58 72" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <!-- Arms -->
+        <ellipse id="armL" cx="18" cy="70" rx="6" ry="10" fill="#a02e1a"/>
+        <ellipse id="armR" cx="82" cy="70" rx="6" ry="10" fill="#a02e1a"/>
+      </svg>
+      <div id="enterPrompt" class="enter-prompt hidden">Press <kbd>W</kbd> to enter</div>
+    </div>
+
+    <!-- NPCs -->
+    <div id="npcs" class="npcs"></div>
+
+    <!-- Money particles container -->
+    <div id="particles" class="particles"></div>
+  </main>
+
+  <!-- Modal for building interactions (legacy, used for some popups) -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-content">
+      <button id="modalClose" class="modal-close">×</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- 3D Interior Scene (replaces modal for building interactions) -->
+  <div id="interior" class="interior hidden">
+    <div class="interior-stage">
+      <div class="interior-room" id="interiorRoom">
+        <div class="back-wall" id="backWall">
+          <div class="wall-decor" id="wallDecor"></div>
+          <div class="building-title" id="interiorTitle"></div>
+          <div class="building-subtitle" id="interiorSubtitle"></div>
+        </div>
+        <div class="floor-3d" id="floor3d"></div>
+        <div class="stations" id="stations"></div>
+        <div class="interior-player" id="interiorPlayer">
+          <div class="player-shadow"></div>
+          <svg viewBox="0 0 100 140" class="hotdog-svg">
+            <defs>
+              <linearGradient id="bunGI" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#f4c27a"/>
+                <stop offset="100%" stop-color="#a96b2c"/>
+              </linearGradient>
+              <linearGradient id="dogGI" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#ff7a59"/>
+                <stop offset="100%" stop-color="#a02e1a"/>
+              </linearGradient>
+            </defs>
+            <rect x="32" y="98" width="10" height="22" rx="4" fill="#3b2719"/>
+            <rect x="58" y="98" width="10" height="22" rx="4" fill="#3b2719"/>
+            <ellipse cx="50" cy="80" rx="38" ry="14" fill="url(#bunGI)"/>
+            <ellipse cx="50" cy="65" rx="32" ry="22" fill="url(#dogGI)"/>
+            <ellipse cx="50" cy="50" rx="38" ry="14" fill="url(#bunGI)"/>
+            <path d="M20 50 Q35 38, 50 50 T80 50" stroke="#ffd23a" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+            <g id="outfitInt"></g>
+            <circle cx="40" cy="62" r="4" fill="#fff"/>
+            <circle cx="60" cy="62" r="4" fill="#fff"/>
+            <circle cx="41" cy="63" r="2" fill="#1a1a1a"/>
+            <circle cx="61" cy="63" r="2" fill="#1a1a1a"/>
+            <path d="M42 72 Q50 78, 58 72" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>
+            <ellipse cx="18" cy="70" rx="6" ry="10" fill="#a02e1a"/>
+            <ellipse cx="82" cy="70" rx="6" ry="10" fill="#a02e1a"/>
+          </svg>
+        </div>
+        <div class="interior-prompt hidden" id="interiorPrompt">Press <kbd>E</kbd> to use</div>
+      </div>
+      <div class="interior-overlay">
+        <button class="exit-btn" id="exitBtn">← Exit Building (ESC)</button>
+        <div class="interior-controls">
+          <kbd>A</kbd><kbd>D</kbd> Walk · <kbd>E</kbd> Interact
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- End-game / win screen -->
+  <div id="winScreen" class="win-screen hidden">
+    <div class="win-card">
+      <h1>YOU MADE IT</h1>
+      <p>You're now a <span id="winTitle">Hot Dog Mogul</span>! The city's frankfurters salute you.</p>
+      <div class="win-stats">
+        <div>Days survived: <span id="winDays">0</span></div>
+        <div>Net worth: $<span id="winMoney">0</span></div>
+      </div>
+      <div class="submit-score" id="submitScoreBox">
+        <p>Submit your score to the leaderboard:</p>
+        <div class="submit-row">
+          <input type="text" id="winName" maxlength="20" placeholder="Your hot dog name" />
+          <button id="submitScoreBtn" class="big-btn small">Submit</button>
+        </div>
+        <div id="submitStatus" class="submit-status"></div>
+      </div>
+      <div class="win-buttons">
+        <button id="viewLbBtn" class="big-btn secondary">🏆 Leaderboard</button>
+        <button id="restartBtn" class="big-btn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save toast -->
+  <div id="saveToast" class="save-toast hidden">💾 Saved</div>
+
+  <!-- Save controls (corner) -->
+  <div id="saveControls" class="save-controls hidden">
+    <button id="manualSaveBtn" title="Save Game">💾</button>
+    <button id="resetGameBtn" title="Reset & New Game">🔄</button>
+  </div>
+
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
