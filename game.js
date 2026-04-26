@@ -12,9 +12,24 @@ const API_URL = (typeof window !== 'undefined' && window.HDT_API_URL)
   || (typeof localStorage !== 'undefined' && localStorage.getItem('hdt_api'))
   || ''; // empty disables global leaderboard (falls back to local)
 
-const SAVE_KEY = 'hdt_save_v2';
+const SAVE_KEY = 'hdt_save_v3';
 const LOCAL_LB_KEY = 'hdt_lb_local';
 const PLAYER_NAME_KEY = 'hdt_name';
+
+// ---------- BALANCE / DIFFICULTY ----------
+// Game-minutes per real-second when idle. Lower = slower. Was 15 in v2.
+const IDLE_TIME_RATE = 5;
+// Net worth required (in addition to Mogul level) to win.
+const WIN_NET_WORTH = 250000;
+// XP fatigue: each repeat of the same action key in a day multiplies XP by this.
+const XP_FATIGUE = 0.8;
+// Day-based inflation factor for rent and upkeep.
+const INFLATION_PER_DAY = 0.04;
+// Passive stat drain per game-minute.
+const ENERGY_DRAIN = 0.012;
+const HUNGER_DRAIN = 0.010;
+// Mood drain per game-minute when stressed (high career level).
+const MOOD_DRAIN_BASE = 0.004;
 
 // ---------- GAME STATE ----------
 const state = {
@@ -55,22 +70,26 @@ const state = {
   stockPrices: { frank: 200, bun: 300, kraft: 500 },
   educationLevel: 0,            // 0=none, 1=class taken, 2=MBA
   ownsMansion: false,
-  sick: false,
+  sick: 0,                      // 0 = healthy, otherwise days remaining sick
+
+  // Difficulty / pacing
+  xpFatigue: {},                // per-day {actionKey: count} → diminishing XP returns
+  sickStreak: 0,                // total days spent sick (cosmetic, for events)
 };
 
 // ---------- CAREER LADDER ----------
 const CAREERS = [
-  { title: 'Unemployed Wiener',  xpToNext: 0,    pay: 0,    outfit: 'plain' },
-  { title: 'Street Cart Vendor', xpToNext: 30,   pay: 8,    outfit: 'plain' },
-  { title: 'Office Intern',      xpToNext: 60,   pay: 18,   outfit: 'tie' },
-  { title: 'Junior Frankfurter', xpToNext: 120,  pay: 35,   outfit: 'tie' },
-  { title: 'Sales Associate',    xpToNext: 200,  pay: 60,   outfit: 'suit' },
-  { title: 'Manager Mustard',    xpToNext: 320,  pay: 100,  outfit: 'suit' },
-  { title: 'VP of Buns',         xpToNext: 500,  pay: 180,  outfit: 'suit' },
-  { title: 'Executive Wiener',   xpToNext: 750,  pay: 320,  outfit: 'tux' },
-  { title: 'CEO Frankfurter',    xpToNext: 1100, pay: 600,  outfit: 'tux' },
-  { title: 'Hot Dog Mogul',      xpToNext: 1600, pay: 1200, outfit: 'ceo' },
-  { title: 'Frankfurter Baron',  xpToNext: 2400, pay: 2500, outfit: 'ceo' },
+  { title: 'Unemployed Wiener',  xpToNext: 0,     pay: 0,    outfit: 'plain' },
+  { title: 'Street Cart Vendor', xpToNext: 60,    pay: 8,    outfit: 'plain' },
+  { title: 'Office Intern',      xpToNext: 160,   pay: 18,   outfit: 'tie' },
+  { title: 'Junior Frankfurter', xpToNext: 360,   pay: 35,   outfit: 'tie' },
+  { title: 'Sales Associate',    xpToNext: 700,   pay: 60,   outfit: 'suit' },
+  { title: 'Manager Mustard',    xpToNext: 1200,  pay: 100,  outfit: 'suit' },
+  { title: 'VP of Buns',         xpToNext: 2000,  pay: 180,  outfit: 'suit' },
+  { title: 'Executive Wiener',   xpToNext: 3100,  pay: 320,  outfit: 'tux' },
+  { title: 'CEO Frankfurter',    xpToNext: 4600,  pay: 600,  outfit: 'tux' },
+  { title: 'Hot Dog Mogul',      xpToNext: 6500,  pay: 1200, outfit: 'ceo' },
+  { title: 'Frankfurter Baron',  xpToNext: 9500,  pay: 2500, outfit: 'ceo' },
   { title: 'Wiener Tycoon',      xpToNext: Infinity, pay: 5000, outfit: 'ceo' },
 ];
 
@@ -368,11 +387,26 @@ const BUILDING_INTERIORS = {
     decor: ['🏆', '👑', '💎', '🥇'],
     width: 1300,
     stations: () => {
-      const reqLvl = 9; // need to be Hot Dog Mogul
-      if (state.careerLevel >= reqLvl) {
+      const reqLvl = 9; // Hot Dog Mogul
+      const nw = networth();
+      const meetsLevel = state.careerLevel >= reqLvl;
+      const meetsWealth = nw >= WIN_NET_WORTH;
+      if (meetsLevel && meetsWealth) {
         return [{ x: 650, icon: '🏆', label: 'Claim Mogul Status', action: 'win', price: 'WIN!', priceClass: 'gain' }];
       }
-      return [{ x: 650, icon: '🚪', label: 'Sorry, Moguls only', action: 'leave', disable: false }];
+      const stations = [];
+      if (!meetsLevel) {
+        stations.push({ x: 480, icon: '📋', label: `Need career: Hot Dog Mogul (you: ${CAREERS[state.careerLevel].title})`, action: 'leave', disable: true });
+      } else {
+        stations.push({ x: 480, icon: '✅', label: 'Career: Hot Dog Mogul ✓', action: 'leave', disable: true });
+      }
+      if (!meetsWealth) {
+        const remaining = (WIN_NET_WORTH - nw).toLocaleString();
+        stations.push({ x: 820, icon: '💰', label: `Need net worth $${WIN_NET_WORTH.toLocaleString()} (need $${remaining} more)`, action: 'leave', disable: true });
+      } else {
+        stations.push({ x: 820, icon: '✅', label: `Net worth $${WIN_NET_WORTH.toLocaleString()} ✓`, action: 'leave', disable: true });
+      }
+      return stations;
     },
   },
 };
@@ -645,23 +679,25 @@ function update(dt) {
     updateNpcs(dt);
   }
 
-  // Time progresses (each in-game day takes ~96 real seconds)
-  state.timeMin += dt * 15;
+  // Time progresses (each in-game day takes ~288 real seconds at IDLE_TIME_RATE=5)
+  const gameMinThisFrame = dt * IDLE_TIME_RATE;
+  state.timeMin += gameMinThisFrame;
   if (state.timeMin >= 1440) {
     state.timeMin = 6 * 60;
     state.day += 1;
     onNewDay();
   }
 
-  // Stat decay
-  const minPerSec = 15 / 60;
-  state.energy -= dt * (minPerSec * 0.08);
-  state.hunger -= dt * (minPerSec * 0.10);
-  state.mood -= dt * (minPerSec * 0.04);
+  // Passive stat decay — scales with career level (executive burnout) and sickness
+  const careerStress = 1 + state.careerLevel * 0.06;
+  const sickMult = state.sick > 0 ? 1.8 : 1.0;
+  state.energy -= gameMinThisFrame * ENERGY_DRAIN * careerStress * sickMult;
+  state.hunger -= gameMinThisFrame * HUNGER_DRAIN * sickMult;
+  state.mood   -= gameMinThisFrame * MOOD_DRAIN_BASE * careerStress;
 
   state.energy = clamp(state.energy, 0, 100);
   state.hunger = clamp(state.hunger, 0, 100);
-  state.mood = clamp(state.mood, 0, 100);
+  state.mood   = clamp(state.mood, 0, 100);
 
   if (state.hunger < 5 && Math.random() < 0.005) state.mood -= 0.5;
   if (state.energy < 5 && Math.random() < 0.005) state.mood -= 0.5;
@@ -671,10 +707,11 @@ function update(dt) {
     state.investments += state.investments * 0.0007 * dt;
   }
 
-  // Stock prices drift (random walk)
+  // Stock prices drift (random walk) — volatility grows with day (boom & bust eras)
+  const vol = 0.6 * (1 + state.day * 0.03);
   for (const k of ['frank', 'bun', 'kraft']) {
-    const drift = (Math.random() - 0.48) * 0.6;
-    state.stockPrices[k] = clamp(state.stockPrices[k] + drift, 30, 5000);
+    const drift = (Math.random() - 0.48) * vol;
+    state.stockPrices[k] = clamp(state.stockPrices[k] + drift, 30, 8000);
   }
 
   // Factory passive income
@@ -739,6 +776,25 @@ function renderHUD() {
   else if (hr < 11) icon = '🌅';
   else if (hr >= 17) icon = '🌇';
   $('timeOfDay').textContent = `${icon} ${h12}:${min.toString().padStart(2,'0')} ${ampm}`;
+
+  // Goal progress
+  const goalEl = $('goalText');
+  if (goalEl) {
+    const nw = networth();
+    const reachedLvl = state.careerLevel >= 9;
+    const reachedNw = nw >= WIN_NET_WORTH;
+    if (reachedLvl && reachedNw) {
+      goalEl.textContent = '🏆 Visit the Tower to WIN!';
+      goalEl.classList.add('met');
+    } else if (reachedLvl) {
+      goalEl.textContent = `🎯 Net Worth: $${Math.floor(nw).toLocaleString()} / $${WIN_NET_WORTH.toLocaleString()}`;
+      goalEl.classList.remove('met');
+    } else {
+      const lvlsLeft = 9 - state.careerLevel;
+      goalEl.textContent = `🎯 Goal: Hot Dog Mogul (${lvlsLeft} promo${lvlsLeft===1?'':'s'} away) + $${WIN_NET_WORTH.toLocaleString()}`;
+      goalEl.classList.remove('met');
+    }
+  }
 }
 
 function setBar(id, val) {
@@ -971,7 +1027,7 @@ function handleAction(action, btn) {
       earn(cartE);
       changeStat('energy', -15);
       changeStat('hunger', -10);
-      gainXp(8);
+      gainXp(8, 'cart');
       notify(`Sold hot dogs! +$${cartE}`, 'good');
       spawnParticle(`+$${cartE}`, 'gain');
       reopenCurrent();
@@ -1004,7 +1060,7 @@ function handleAction(action, btn) {
       changeStat('energy', -25);
       changeStat('hunger', -15);
       changeStat('mood', -8);
-      gainXp(20);
+      gainXp(20, 'office');
       notify(`Worked hard. Earned $${pay}.`, 'good');
       spawnParticle(`+$${pay}`, 'gain');
       reopenCurrent();
@@ -1023,7 +1079,7 @@ function handleAction(action, btn) {
     case 'meeting':
       advanceTime(60);
       changeStat('mood', -10);
-      gainXp(10);
+      gainXp(10, 'meeting');
       notify('That meeting could have been an email.', 'bad');
       reopenCurrent();
       break;
@@ -1054,7 +1110,7 @@ function handleAction(action, btn) {
       changeStat('energy', 15);
       changeStat('mood', 5);
       changeStat('hunger', -15);
-      gainXp(5);
+      gainXp(5, 'workout');
       notify('Buns of steel acquired.', 'good');
       reopenCurrent();
       break;
@@ -1144,7 +1200,7 @@ function handleAction(action, btn) {
     case 'network':
       if (!spend(25)) return;
       advanceTime(90);
-      gainXp(15);
+      gainXp(15, 'network');
       changeStat('mood', 10);
       notify('Made a connection. Could be useful.', 'good');
       reopenCurrent();
@@ -1180,7 +1236,7 @@ function handleAction(action, btn) {
       advanceTime(45);
       changeStat('energy', 10);
       changeStat('hunger', -10);
-      gainXp(4);
+      gainXp(4, 'cardio');
       notify('Your bun is now tighter than your schedule.', 'good');
       reopenCurrent();
       break;
@@ -1198,7 +1254,7 @@ function handleAction(action, btn) {
       const art = 5 + state.careerLevel * 2 + Math.floor(Math.random() * 8);
       earn(art);
       changeStat('mood', 8);
-      gainXp(3);
+      gainXp(3, 'art');
       notify(`Sold a painting for $${art}!`, 'good');
       spawnParticle(`+$${art}`, 'gain');
       reopenCurrent();
@@ -1256,14 +1312,14 @@ function handleAction(action, btn) {
     case 'research':
       if (!spend(300)) return;
       advanceTime(120);
-      gainXp(100);
+      gainXp(100, 'research');
       changeStat('energy', -25);
       notify('Published a paper on bun structural integrity!', 'good');
       reopenCurrent();
       break;
     case 'study':
       advanceTime(60);
-      gainXp(15);
+      gainXp(15, 'study');
       changeStat('energy', -10);
       notify('Quiet study time. +15 XP', 'good');
       reopenCurrent();
@@ -1275,14 +1331,14 @@ function handleAction(action, btn) {
       advanceTime(45);
       changeStat('energy', 20);
       changeStat('mood', 10);
-      state.sick = false;
+      state.sick = 0;
       notify('Doc says you\'re in great shape!', 'good');
       reopenCurrent();
       break;
     case 'medicine':
       if (!spend(80)) return;
       changeStat('energy', 30);
-      state.sick = false;
+      state.sick = 0;
       notify('💊 Feeling better already.', 'good');
       reopenCurrent();
       break;
@@ -1292,7 +1348,7 @@ function handleAction(action, btn) {
       state.energy = 100;
       state.hunger = 100;
       changeStat('mood', 30);
-      state.sick = false;
+      state.sick = 0;
       notify('🚑 Fully restored! Worth every penny.', 'epic');
       reopenCurrent();
       break;
@@ -1389,7 +1445,7 @@ function handleAction(action, btn) {
       earn(pay);
       changeStat('energy', -30);
       changeStat('hunger', -20);
-      gainXp(25);
+      gainXp(25, 'factory_shift');
       notify(`Ran a shift. Earned $${pay}.`, 'good');
       spawnParticle(`+$${pay}`, 'gain');
       reopenCurrent();
@@ -1420,7 +1476,7 @@ function handleAction(action, btn) {
       advanceTime(60);
       const profit = 4000 + Math.floor(Math.random() * 4000);
       earn(profit);
-      gainXp(30);
+      gainXp(30, 'big_deal');
       notify(`🚛 Sealed a $${profit} distribution deal!`, 'epic');
       spawnParticle(`+$${profit}`, 'epic');
       reopenCurrent();
@@ -1462,7 +1518,7 @@ function handleAction(action, btn) {
       if (!spend(1000)) return;
       advanceTime(180);
       changeStat('mood', 60);
-      gainXp(40);
+      gainXp(40, 'party');
       notify('🥂 Threw the party of the year!', 'epic');
       spawnConfetti();
       reopenCurrent();
@@ -1502,11 +1558,29 @@ function changeStat(stat, delta) {
   state[stat] = clamp(state[stat] + delta, 0, 100);
 }
 
-function gainXp(amt) {
+// gainXp(amount, key) — `key` enables daily diminishing returns per action type
+// (forces variety: spamming the same action gives less and less XP each repeat that day).
+function gainXp(amt, key) {
   // Education boosts XP gain
-  const bonus = 1 + state.educationLevel * 0.25;
-  state.xp += amt * bonus;
-  // Auto-promote check
+  const eduBonus = 1 + state.educationLevel * 0.25;
+
+  // Daily fatigue per action key
+  let fatigueBonus = 1;
+  if (key) {
+    const reps = state.xpFatigue[key] || 0;
+    fatigueBonus = Math.pow(XP_FATIGUE, reps);
+    state.xpFatigue[key] = reps + 1;
+    // Floor at 25% so it's never useless
+    if (fatigueBonus < 0.25) fatigueBonus = 0.25;
+  }
+
+  // Stat penalties — low mood / sickness reduce learning
+  let statMult = 1;
+  if (state.mood < 30) statMult *= 0.7;
+  if (state.sick > 0) statMult *= 0.6;
+
+  state.xp += amt * eduBonus * fatigueBonus * statMult;
+
   while (state.careerLevel < CAREERS.length - 1 && state.xp >= CAREERS[state.careerLevel].xpToNext) {
     if (state.careerLevel === 1 && !state.hasJob) break;
     state.careerLevel += 1;
@@ -1557,47 +1631,104 @@ function advanceTime(minutes) {
 }
 
 function onNewDay() {
-  // Daily rent / costs
-  let rent = state.ownsMansion ? 500 : (state.ownsApartment ? 100 : 25);
+  // Reset XP fatigue (variety bonus refreshes daily)
+  state.xpFatigue = {};
+
+  // Inflation factor (everything gets more expensive over time)
+  const inflation = 1 + state.day * INFLATION_PER_DAY;
+
+  // Daily rent
+  const baseRent = state.ownsMansion ? 800 : (state.ownsApartment ? 120 : 25);
+  const rent = Math.floor(baseRent * inflation);
   if (state.money >= rent) {
     state.money -= rent;
-    notify(`Daily rent: -$${rent}`, 'bad');
+    notify(`💸 Daily rent: -$${rent}` + (inflation > 1.2 ? ' (inflation!)' : ''), 'bad');
   } else {
     state.mood -= 20;
-    notify(`Couldn't pay rent! Mood crashed.`, 'bad');
+    notify(`Couldn't pay rent! Mood crashed. (-$${rent} owed)`, 'bad');
   }
-  // Random event
-  if (Math.random() < 0.5) randomEvent();
+
+  // Factory upkeep — automation costs more
+  if (state.factoryOwned) {
+    const upkeep = Math.floor((40 + state.factoryAutomation * 60) * inflation);
+    if (state.money >= upkeep) {
+      state.money -= upkeep;
+      notify(`🏭 Factory upkeep: -$${upkeep}`, 'bad');
+    } else {
+      state.factoryAutomation = Math.max(0, state.factoryAutomation - 1);
+      notify(`Couldn't pay factory upkeep! Automation degraded.`, 'bad');
+    }
+  }
+
+  // Brokerage fees on stocks (small but adds up at scale)
+  const sharesOwned = state.stockShares.frank + state.stockShares.bun + state.stockShares.kraft;
+  if (sharesOwned > 0) {
+    const fee = Math.floor(sharesOwned * 2 * inflation);
+    state.money = Math.max(0, state.money - fee);
+    if (fee >= 10) notify(`📊 Brokerage fees: -$${fee}`, 'bad');
+  }
+
+  // Sickness ticks down (and degrades stats while sick)
+  if (state.sick > 0) {
+    state.sick -= 1;
+    state.sickStreak += 1;
+    if (state.sick === 0) {
+      notify(`🤧 You\'ve recovered.`, 'good');
+    } else {
+      changeStat('energy', -15);
+      changeStat('mood', -10);
+      notify(`🤒 Still sick (${state.sick}d remaining).`, 'bad');
+    }
+  }
+
+  // Random event chance grows with day, capped at 80%
+  const eventChance = Math.min(0.80, 0.45 + state.day * 0.015);
+  if (Math.random() < eventChance) randomEvent();
 }
 
+// Difficulty multiplier scales with day and career level (richer = bigger targets)
+function diffMult() { return 1 + state.day * 0.04 + state.careerLevel * 0.08; }
+
 const EVENTS = [
-  { msg: 'You found $20 on the sidewalk!', do: () => { earn(20); spawnParticle('+$20', 'gain'); }, type: 'good' },
-  { msg: 'A pigeon stole your wallet. -$15', do: () => { state.money = Math.max(0, state.money - 15); spawnParticle('-$15', 'loss'); }, type: 'bad' },
-  { msg: 'A child smiled at you. Mood boosted!', do: () => { changeStat('mood', 15); }, type: 'good' },
-  { msg: 'You got rained on. Mood dropped.', do: () => { changeStat('mood', -15); }, type: 'bad' },
-  { msg: 'Investments paid out a dividend!', do: () => { const d = Math.floor(state.investments * 0.05); if (d > 0) { earn(d); spawnParticle(`+$${d}`, 'gain'); } }, type: 'good' },
-  { msg: 'Tax day! Lost 10% of your cash.', do: () => { const t = Math.floor(state.money * 0.1); state.money -= t; spawnParticle(`-$${t}`, 'loss'); }, type: 'bad' },
-  { msg: 'You got food poisoning! Visit the hospital.', do: () => { state.sick = true; changeStat('energy', -30); changeStat('mood', -15); }, type: 'bad' },
-  { msg: 'A stock you own surged!', do: () => {
-      const owned = Object.keys(state.stockShares).filter(k => state.stockShares[k] > 0);
-      if (owned.length === 0) return;
-      const pick = owned[Math.floor(Math.random() * owned.length)];
-      state.stockPrices[pick] *= 1.15;
-    }, type: 'good' },
-  { msg: 'A stock crashed!', do: () => {
-      const owned = Object.keys(state.stockShares).filter(k => state.stockShares[k] > 0);
-      if (owned.length === 0) return;
-      const pick = owned[Math.floor(Math.random() * owned.length)];
-      state.stockPrices[pick] *= 0.85;
-    }, type: 'bad' },
-  { msg: 'Your factory got featured in Bun Weekly!', do: () => { if (state.factoryOwned) { state.factoryAccumulated += 500; spawnParticle('+$500', 'gain'); } }, type: 'good' },
-  { msg: 'A celebrity ordered hot dogs from you!', do: () => { earn(150); spawnParticle('+$150', 'gain'); }, type: 'good' },
+  { msg: () => { const a = Math.floor(20 * diffMult()); return `You found $${a} on the sidewalk!`; },
+    do: () => { const a = Math.floor(20 * diffMult()); earn(a); spawnParticle(`+$${a}`, 'gain'); }, type: 'good' },
+  { msg: () => `A pigeon stole your wallet. -$${Math.floor(15 * diffMult())}`,
+    do: () => { const a = Math.floor(15 * diffMult()); state.money = Math.max(0, state.money - a); spawnParticle(`-$${a}`, 'loss'); }, type: 'bad' },
+  { msg: 'A child smiled at you. Mood boosted!',
+    do: () => { changeStat('mood', 15); }, type: 'good' },
+  { msg: 'You got rained on. Mood dropped.',
+    do: () => { changeStat('mood', -15); }, type: 'bad' },
+  { msg: 'Investments paid out a dividend!',
+    do: () => { const d = Math.floor(state.investments * 0.05); if (d > 0) { earn(d); spawnParticle(`+$${d}`, 'gain'); } }, type: 'good' },
+  { msg: () => `Tax day! Lost ${Math.min(25, 10 + state.day)}% of your cash.`,
+    do: () => { const pct = Math.min(0.25, 0.10 + state.day * 0.01); const t = Math.floor(state.money * pct); state.money -= t; spawnParticle(`-$${t}`, 'loss'); }, type: 'bad' },
+  { msg: 'You got food poisoning! 2 days sick — visit the hospital to recover faster.',
+    do: () => { state.sick = Math.max(state.sick, 2); changeStat('energy', -30); changeStat('mood', -15); }, type: 'bad' },
+  { msg: 'A stock you own surged!',
+    do: () => { const owned = Object.keys(state.stockShares).filter(k => state.stockShares[k] > 0); if (!owned.length) return; const pick = owned[Math.floor(Math.random() * owned.length)]; state.stockPrices[pick] *= 1.15; }, type: 'good' },
+  { msg: () => `A stock crashed ${Math.floor(15 + state.day * 0.5)}%!`,
+    do: () => { const owned = Object.keys(state.stockShares).filter(k => state.stockShares[k] > 0); if (!owned.length) return; const pick = owned[Math.floor(Math.random() * owned.length)]; const pct = 0.15 + Math.min(0.25, state.day * 0.005); state.stockPrices[pick] *= (1 - pct); }, type: 'bad' },
+  { msg: 'Your factory got featured in Bun Weekly!',
+    do: () => { if (state.factoryOwned) { state.factoryAccumulated += 500 * diffMult(); spawnParticle(`+$${Math.floor(500 * diffMult())}`, 'gain'); } }, type: 'good' },
+  { msg: () => { const a = Math.floor(150 * diffMult()); return `A celebrity ordered hot dogs from you! +$${a}`; },
+    do: () => { const a = Math.floor(150 * diffMult()); earn(a); spawnParticle(`+$${a}`, 'gain'); }, type: 'good' },
+  // ----- Late-game disasters (only fire after day 5) -----
+  { msg: () => `🔥 Equipment fire at the factory! -$${Math.floor(800 * diffMult())}`,
+    do: () => { if (!state.factoryOwned) return; const a = Math.floor(800 * diffMult()); state.money = Math.max(0, state.money - a); spawnParticle(`-$${a}`, 'loss'); }, type: 'bad', minDay: 5 },
+  { msg: 'A rival hot dog brand poached your top employee. Career stress -mood',
+    do: () => { changeStat('mood', -25); }, type: 'bad', minDay: 5 },
+  { msg: () => `📰 PR scandal! Damages: $${Math.floor(500 * diffMult())}`,
+    do: () => { const a = Math.floor(500 * diffMult()); state.money = Math.max(0, state.money - a); spawnParticle(`-$${a}`, 'loss'); }, type: 'bad', minDay: 8 },
+  { msg: 'You hit the headlines as Frankfurter of the Year!',
+    do: () => { changeStat('mood', 30); state.xp += 100; }, type: 'good', minDay: 8 },
 ];
 
 function randomEvent() {
-  const e = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+  const pool = EVENTS.filter(e => !e.minDay || state.day >= e.minDay);
+  const e = pool[Math.floor(Math.random() * pool.length)];
   e.do();
-  notify(e.msg, e.type);
+  const text = typeof e.msg === 'function' ? e.msg() : e.msg;
+  notify(text, e.type);
 }
 
 // ---------- OUTFIT RENDERING ----------
@@ -1702,9 +1833,8 @@ function hasSave() {
 function saveGame() {
   try {
     const snapshot = {
-      v: 2,
+      v: 3,
       ts: Date.now(),
-      // Persist primitive state only (skip transient interior fields)
       money: state.money,
       energy: state.energy,
       hunger: state.hunger,
@@ -1730,6 +1860,8 @@ function saveGame() {
       stockPrices: state.stockPrices,
       educationLevel: state.educationLevel,
       sick: state.sick,
+      xpFatigue: state.xpFatigue,
+      sickStreak: state.sickStreak,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
   } catch (e) {

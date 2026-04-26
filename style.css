@@ -1448,6 +1448,26 @@ kbd {
   to { transform: translateY(120vh) rotate(720deg); opacity: 0; }
 }
 
+/* ============== GOAL TEXT ============== */
+.goal-text {
+  font-size: 11px;
+  color: #ffd23a;
+  margin-top: 4px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.goal-text.met {
+  color: #34d399;
+  animation: goalPulse 1.5s ease infinite;
+}
+
+@keyframes goalPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
 /* ============== INTRO BUTTONS / SAVE / LEADERBOARD ============== */
 .intro-buttons {
   display: flex;
