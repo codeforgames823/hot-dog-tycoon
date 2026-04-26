@@ -33,7 +33,7 @@ A web-based life sim where you play as a hot dog hustling through the city, clim
 ## 🛠️ Architecture
 
 ```
-hot-dog-tycoon/   →  static frontend  → GitHub Pages
+./                →  static frontend  → GitHub Pages
   index.html
   style.css
   game.js
@@ -53,7 +53,6 @@ The frontend works **with or without** the backend:
 
 ```bash
 # 1) Frontend (any static server works)
-cd hot-dog-tycoon
 python -m http.server 9091
 # open http://localhost:9091
 
@@ -70,19 +69,18 @@ npm run dev
 
 ## 🌐 Deploying
 
-- **Frontend** → GitHub Pages serves the `hot-dog-tycoon/` folder automatically (configured in repo Settings → Pages, source: `main` branch, `/hot-dog-tycoon` folder).
+- **Frontend** → GitHub Pages serves the repo root automatically (Settings → Pages, source: `main` branch, `/` folder).
 - **Backend** → see [`server/README.md`](server/README.md) for the Azure Container Apps recipe (zero-downtime via revisions, with rollback instructions).
 
 ## 📁 Project layout
 
 ```
 .
-├── README.md                  ← you are here
-├── hot-dog-tycoon/            ← static game (deployed to GitHub Pages)
-│   ├── index.html
-│   ├── style.css
-│   └── game.js
-└── server/                    ← leaderboard API (deploys to Azure Container Apps)
+├── README.md         ← you are here
+├── index.html        ← static game (deployed to GitHub Pages)
+├── style.css
+├── game.js
+└── server/           ← leaderboard API (deploys to Azure Container Apps)
     ├── server.js
     ├── schema.sql
     ├── init-db.js
