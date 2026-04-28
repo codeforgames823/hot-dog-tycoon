@@ -18,9 +18,9 @@ const PLAYER_NAME_KEY = 'hdt_name';
 
 // ---------- BALANCE / DIFFICULTY ----------
 // Game-minutes per real-second when idle. Lower = slower. Was 15 in v2.
-const IDLE_TIME_RATE = 5;
+const IDLE_TIME_RATE = 4.5;
 // Net worth required (in addition to Mogul level) to win.
-const WIN_NET_WORTH = 250000;
+const WIN_NET_WORTH = 300000;
 // XP fatigue: each repeat of the same action key in a day multiplies XP by this.
 const XP_FATIGUE = 0.8;
 // Day-based inflation factor for rent and upkeep.
@@ -95,25 +95,33 @@ const CAREERS = [
 
 // ---------- BUILDINGS (city overworld) ----------
 const BUILDING_DEFS = [
-  { id: 'home',       name: 'Tiny Apartment',     icon: '🏠', color: '#a87858', windows: [3,2], height: 200, x: 200 },
-  { id: 'cart',       name: "Frank's Hot Dog Cart", icon: '🌭', color: '#ff7a59', windows: [1,1], height: 100, x: 600 },
-  { id: 'diner',      name: "Mama's Diner",       icon: '🍔', color: '#d4584a', windows: [3,2], height: 220, x: 900 },
-  { id: 'gym',        name: 'Iron Bun Gym',       icon: '💪', color: '#5a7a8a', windows: [4,3], height: 280, x: 1300 },
-  { id: 'park',       name: 'Central Park',       icon: '🌳', color: '#4a7a3a', windows: [0,0], height: 80,  x: 1700 },
-  { id: 'office',     name: 'Mustard Corp Office', icon: '🏢', color: '#7a8aa0', windows: [4,5], height: 360, x: 2100 },
-  { id: 'bank',       name: 'First National Bun', icon: '🏦', color: '#cab87a', windows: [4,4], height: 320, x: 2550 },
-  { id: 'shop',       name: 'Dapper Dog Outfits', icon: '👔', color: '#9b6ab8', windows: [3,2], height: 240, x: 2950 },
-  { id: 'bar',        name: 'The Relish Lounge',  icon: '🍻', color: '#5a4080', windows: [3,2], height: 200, x: 3300 },
-  { id: 'university', name: 'Bun University',     icon: '🎓', color: '#8b5a8b', windows: [5,4], height: 340, x: 3700 },
-  { id: 'hospital',   name: 'Sausage General',    icon: '🏥', color: '#e8eef4', windows: [4,5], height: 360, x: 4150 },
-  { id: 'casino',     name: 'Lucky Frank Casino', icon: '🎰', color: '#5a1a1a', windows: [5,3], height: 280, x: 4600 },
-  { id: 'stocks',     name: 'Stock Exchange',     icon: '📈', color: '#1a3a4a', windows: [5,5], height: 380, x: 5050 },
-  { id: 'factory',    name: 'Hot Dog Factory',    icon: '🏭', color: '#5a5045', windows: [3,2], height: 260, x: 5550 },
-  { id: 'mansion',    name: 'Wiener Mansion',     icon: '🏰', color: '#6b3a65', windows: [6,4], height: 380, x: 6050 },
-  { id: 'tower',      name: 'Frankfurter Tower',  icon: '🗼', color: '#e8b04a', windows: [5,9], height: 520, x: 6650 },
+  { id: 'home',       name: 'Tiny Apartment',       icon: '🏠', color: '#a87858', windows: [3,2], height: 200, x: 200 },
+  { id: 'cart',       name: "Frank's Hot Dog Cart", icon: '🌭', color: '#ff7a59', windows: [1,1], height: 100, x: 520 },
+  { id: 'bakery',     name: 'Golden Bun Bakery',    icon: '🥐', color: '#d4a574', windows: [2,2], height: 170, x: 860 },
+  { id: 'diner',      name: "Mama's Diner",         icon: '🍔', color: '#d4584a', windows: [3,2], height: 220, x: 1200 },
+  { id: 'gym',        name: 'Iron Bun Gym',         icon: '💪', color: '#5a7a8a', windows: [4,3], height: 280, x: 1560 },
+  { id: 'park',       name: 'Central Park',         icon: '🌳', color: '#4a7a3a', windows: [0,0], height: 80,  x: 1920 },
+  { id: 'office',     name: 'Mustard Corp Office',  icon: '🏢', color: '#7a8aa0', windows: [4,5], height: 360, x: 2280 },
+  { id: 'bank',       name: 'First National Bun',   icon: '🏦', color: '#cab87a', windows: [4,4], height: 320, x: 2700 },
+  { id: 'shop',       name: 'Dapper Dog Outfits',   icon: '👔', color: '#9b6ab8', windows: [3,2], height: 240, x: 3120 },
+  { id: 'bar',        name: 'The Relish Lounge',    icon: '🍻', color: '#5a4080', windows: [3,2], height: 200, x: 3520 },
+  { id: 'subway',     name: 'Metro Bun Terminal',   icon: '🚇', color: '#3a5058', windows: [3,4], height: 260, x: 3920 },
+  { id: 'university', name: 'Bun University',       icon: '🎓', color: '#8b5a8b', windows: [5,4], height: 340, x: 4360 },
+  { id: 'hospital',   name: 'Sausage General',      icon: '🏥', color: '#e8eef4', windows: [4,5], height: 360, x: 4780 },
+  { id: 'theater',    name: 'Wiener Theater',       icon: '🎭', color: '#8a4a5a', windows: [4,3], height: 300, x: 5200 },
+  { id: 'casino',     name: 'Lucky Frank Casino',   icon: '🎰', color: '#5a1a1a', windows: [5,3], height: 280, x: 5620 },
+  { id: 'arcade',     name: 'Pixel Bun Arcade',     icon: '👾', color: '#4a3a7a', windows: [3,3], height: 220, x: 6040 },
+  { id: 'stocks',     name: 'Stock Exchange',       icon: '📈', color: '#1a3a4a', windows: [5,5], height: 380, x: 6460 },
+  { id: 'hotel',      name: 'Grand Bun Hotel',      icon: '🏨', color: '#6a7a8a', windows: [4,6], height: 340, x: 6900 },
+  { id: 'factory',    name: 'Hot Dog Factory',      icon: '🏭', color: '#5a5045', windows: [3,2], height: 260, x: 7340 },
+  { id: 'food_truck', name: 'Rolling Frank Truck',  icon: '🚚', color: '#e85a3a', windows: [2,1], height: 140, x: 7760 },
+  { id: 'museum',     name: 'Mustard Museum',       icon: '🖼️', color: '#c4b89a', windows: [4,3], height: 280, x: 8140 },
+  { id: 'mansion',    name: 'Wiener Mansion',       icon: '🏰', color: '#6b3a65', windows: [6,4], height: 380, x: 8560 },
+  { id: 'airport',    name: 'Frankfurter Intl',     icon: '✈️', color: '#8aa4c4', windows: [5,5], height: 360, x: 8980 },
+  { id: 'tower',      name: 'Frankfurter Tower',    icon: '🗼', color: '#e8b04a', windows: [5,9], height: 520, x: 9420 },
 ];
 
-const WORLD_WIDTH = 7400;
+const WORLD_WIDTH = 10200;
 
 // ---------- 3D BUILDING INTERIORS ----------
 // Each interior has a theme + decor + an array of stations.
@@ -379,6 +387,104 @@ const BUILDING_INTERIORS = {
       ];
     },
   },
+  bakery: {
+    name: 'Golden Bun Bakery',
+    icon: '🥐',
+    theme: 'bakery',
+    subtitle: 'Fresh pastries — fuel for the grind.',
+    decor: ['🥐', '🍞', '☕', '🧈'],
+    width: 1400,
+    stations: () => [
+      { x: 300, icon: '🧁', label: 'Muffin & Coffee', action: 'bakery_muffin', price: '$4', priceClass: 'loss', disable: state.money < 4 },
+      { x: 600, icon: '☕', label: 'Artisan Latte', action: 'bakery_latte', price: '$7', priceClass: 'loss', disable: state.money < 7 },
+      { x: 900, icon: '🥨', label: 'Cronut Deluxe', action: 'bakery_cronut', price: '$18', priceClass: 'loss', disable: state.money < 18 },
+    ],
+  },
+  subway: {
+    name: 'Metro Bun Terminal',
+    icon: '🚇',
+    theme: 'subway',
+    subtitle: 'Stand clear of the closing buns.',
+    decor: ['🚇', '🗺️', '🎫', '⏱️'],
+    width: 1400,
+    stations: () => [
+      { x: 400, icon: '🚇', label: 'Ride the Line (45min)', action: 'subway_ride', price: '$3', priceClass: 'loss', disable: state.money < 3 },
+      { x: 900, icon: '🎸', label: 'Tip a Busker', action: 'subway_busker', price: '$5', priceClass: 'loss', disable: state.money < 5 },
+    ],
+  },
+  theater: {
+    name: 'Wiener Theater',
+    icon: '🎭',
+    theme: 'theater',
+    subtitle: 'Culture with extra relish.',
+    decor: ['🎭', '🎟️', '🎬', '🎻'],
+    width: 1500,
+    stations: () => [
+      { x: 400, icon: '🎬', label: 'Matinee Movie', action: 'theater_movie', price: '$35', priceClass: 'loss', disable: state.money < 35 },
+      { x: 950, icon: '🎭', label: 'Broadway Night', action: 'theater_broadway', price: '$120', priceClass: 'loss', disable: state.money < 120 },
+    ],
+  },
+  arcade: {
+    name: 'Pixel Bun Arcade',
+    icon: '👾',
+    theme: 'arcade',
+    subtitle: 'Tickets, tokens, and questionable life choices.',
+    decor: ['👾', '🕹️', '🎟️', '💫'],
+    width: 1400,
+    stations: () => [
+      { x: 450, icon: '🎟️', label: 'Token Blast', action: 'arcade_ticket', price: '$15', priceClass: 'loss', disable: state.money < 15 },
+      { x: 950, icon: '🏆', label: 'High Score Challenge', action: 'arcade_highscore', price: '$50', priceClass: 'loss', disable: state.money < 50 },
+    ],
+  },
+  hotel: {
+    name: 'Grand Bun Hotel',
+    icon: '🏨',
+    theme: 'hotel',
+    subtitle: 'Sleep like someone who invoices room service.',
+    decor: ['🏨', '🛎️', '🛏️', '🍾'],
+    width: 1600,
+    stations: () => [
+      { x: 320, icon: '🛏️', label: 'Power Nap Suite', action: 'hotel_nap', price: '$45', priceClass: 'loss', disable: state.money < 45 },
+      { x: 720, icon: '🍾', label: 'Networking Gala', action: 'hotel_gala', price: '$200', priceClass: 'loss', disable: state.money < 200 },
+      { x: 1120, icon: '🥐', label: 'Sunday Brunch Buffet', action: 'hotel_brunch', price: '$65', priceClass: 'loss', disable: state.money < 65 },
+    ],
+  },
+  food_truck: {
+    name: 'Rolling Frank Truck',
+    icon: '🚚',
+    theme: 'food_truck',
+    subtitle: 'Gourmet dogs on wheels.',
+    decor: ['🚚', '🌭', '🔔', '📣'],
+    width: 1300,
+    stations: () => [
+      { x: 420, icon: '🔥', label: 'Run the Truck (90min)', action: 'truck_shift', price: '+$' + truckPay(), priceClass: 'gain', disable: state.energy < 12 },
+      { x: 880, icon: '🌭', label: 'Chef\'s Special Sample', action: 'truck_sample', price: '$6', priceClass: 'loss', disable: state.money < 6 },
+    ],
+  },
+  museum: {
+    name: 'Mustard Museum',
+    icon: '🖼️',
+    theme: 'museum',
+    subtitle: 'High art. Low sodium.',
+    decor: ['🖼️', '🏛️', '📜', '🧑‍🎨'],
+    width: 1500,
+    stations: () => [
+      { x: 450, icon: '🖼️', label: 'Day Admission', action: 'museum_day', price: '$25', priceClass: 'loss', disable: state.money < 25 },
+      { x: 950, icon: '🥂', label: 'Donor Gala', action: 'museum_gala', price: '$150', priceClass: 'loss', disable: state.money < 150 },
+    ],
+  },
+  airport: {
+    name: 'Frankfurter International',
+    icon: '✈️',
+    theme: 'airport',
+    subtitle: 'Business class tastes better with ketchup.',
+    decor: ['✈️', '🛄', '🛂', '🌍'],
+    width: 1700,
+    stations: () => [
+      { x: 450, icon: '🛫', label: 'Shuttle Flight (business)', action: 'airport_shuttle', price: '$400', priceClass: 'loss', disable: state.money < 400 },
+      { x: 1050, icon: '🌙', label: 'Red-Eye Deal Trip', action: 'airport_redeye', price: '$1,500', priceClass: 'loss', disable: state.money < 1500 },
+    ],
+  },
   tower: {
     name: 'Frankfurter Tower',
     icon: '🗼',
@@ -493,7 +599,7 @@ function startGame(continueGame) {
   if (resumed) {
     notify(`Welcome back, ${CAREERS[state.careerLevel].title}! Day ${state.day} resumed.`, 'epic');
   } else {
-    notify('Welcome to the city! 🌭 Walk to the orange cart and press W to enter.', 'epic');
+    notify('Welcome to the megacity strip! 🌭 Hit the cart, bakery, subway — press W to enter buildings.', 'epic');
   }
 
   // Autosave every 10 seconds
@@ -575,7 +681,7 @@ const NPC_EMOJIS = ['🚶', '🚶‍♀️', '🐕', '🐈', '🚴', '🐦', '�
 function spawnNpcs() {
   elNpcs.innerHTML = '';
   elNpcs.style.width = WORLD_WIDTH + 'px';
-  const npcCount = 22;
+  const npcCount = 34;
   for (let i = 0; i < npcCount; i++) {
     const n = document.createElement('div');
     n.className = 'npc';
@@ -1523,6 +1629,172 @@ function handleAction(action, btn) {
       spawnConfetti();
       reopenCurrent();
       break;
+
+    // ----- EXPANDED CITY: BAKERY / SUBWAY / THEATER / ARCADE / HOTEL / TRUCK / MUSEUM / AIRPORT -----
+    case 'bakery_muffin':
+      if (!spend(4)) return;
+      changeStat('hunger', 28);
+      changeStat('mood', 6);
+      notify('🧁 Warm muffin hits different.', 'good');
+      reopenCurrent();
+      break;
+    case 'bakery_latte':
+      if (!spend(7)) return;
+      changeStat('energy', 18);
+      changeStat('hunger', 8);
+      notify('☕ Latte art shaped like a wiener. Cute.', 'good');
+      reopenCurrent();
+      break;
+    case 'bakery_cronut':
+      if (!spend(18)) return;
+      changeStat('hunger', 40);
+      changeStat('mood', 14);
+      notify('🥨 Cronut achieved. Society may proceed.', 'good');
+      reopenCurrent();
+      break;
+
+    case 'subway_ride':
+      if (!spend(3)) return;
+      advanceTime(45);
+      changeStat('mood', 10);
+      changeStat('energy', -6);
+      notify('🚇 You rode the express. Still somehow late.', 'good');
+      reopenCurrent();
+      break;
+    case 'subway_busker':
+      if (!spend(5)) return;
+      changeStat('mood', 14);
+      gainXp(4, 'subway_busker');
+      notify('🎸 You tipped a busker. Good karma pending.', 'good');
+      reopenCurrent();
+      break;
+
+    case 'theater_movie':
+      if (!spend(35)) return;
+      advanceTime(120);
+      changeStat('mood', 30);
+      changeStat('hunger', -8);
+      notify('🎬 Matinee: loud chewing from Row F.', 'good');
+      reopenCurrent();
+      break;
+    case 'theater_broadway':
+      if (!spend(120)) return;
+      advanceTime(180);
+      changeStat('mood', 48);
+      gainXp(22, 'theater_broadway');
+      notify('🎭 Broadway night. You wept during the mustard solo.', 'epic');
+      reopenCurrent();
+      break;
+
+    case 'arcade_ticket':
+      if (!spend(15)) return;
+      {
+        const roll = Math.random();
+        if (roll < 0.22) {
+          earn(40);
+          notify('👾 JACKPOT TICKETS!', 'epic');
+          spawnParticle('+$40', 'gain');
+        } else if (roll < 0.55) {
+          earn(12);
+          notify('👾 Decent haul.', 'good');
+          spawnParticle('+$12', 'gain');
+        } else {
+          notify('👾 The house claims another victim.', 'bad');
+        }
+      }
+      reopenCurrent();
+      break;
+    case 'arcade_highscore':
+      if (!spend(50)) return;
+      changeStat('mood', 22);
+      gainXp(10, 'arcade_hi');
+      notify('🏆 New high score — mentally, if not on the machine.', 'good');
+      reopenCurrent();
+      break;
+
+    case 'hotel_nap':
+      if (!spend(45)) return;
+      advanceTime(90);
+      changeStat('energy', 45);
+      changeStat('hunger', -12);
+      notify('🛏️ Hotel nap: you forgot what year it is.', 'good');
+      reopenCurrent();
+      break;
+    case 'hotel_gala':
+      if (!spend(200)) return;
+      advanceTime(120);
+      changeStat('mood', 38);
+      gainXp(35, 'hotel_gala');
+      notify('🍾 Gala networking: handed out 40 business buns.', 'epic');
+      reopenCurrent();
+      break;
+    case 'hotel_brunch':
+      if (!spend(65)) return;
+      changeStat('hunger', 45);
+      changeStat('mood', 18);
+      notify('🥐 Brunch buffet. Third plate was legally necessary.', 'good');
+      reopenCurrent();
+      break;
+
+    case 'truck_shift':
+      if (state.energy < 12) {
+        notify('Too tired to run the truck!', 'bad');
+        return;
+      }
+      advanceTime(90);
+      const tp = truckPay();
+      earn(tp);
+      changeStat('energy', -18);
+      changeStat('hunger', -12);
+      gainXp(12, 'truck');
+      notify(`🚚 Truck shift done! +$${tp}`, 'good');
+      spawnParticle(`+$${tp}`, 'gain');
+      reopenCurrent();
+      break;
+    case 'truck_sample':
+      if (!spend(6)) return;
+      changeStat('hunger', 18);
+      changeStat('mood', 8);
+      notify('🌭 Chef\'s special — secret is hope.', 'good');
+      reopenCurrent();
+      break;
+
+    case 'museum_day':
+      if (!spend(25)) return;
+      advanceTime(90);
+      changeStat('mood', 18);
+      gainXp(14, 'museum');
+      notify('🖼️ Stared at oil paintings of condiments.', 'good');
+      reopenCurrent();
+      break;
+    case 'museum_gala':
+      if (!spend(150)) return;
+      advanceTime(120);
+      changeStat('mood', 28);
+      gainXp(42, 'museum_gala');
+      notify('🥂 Donor gala: you clapped at modern relish.', 'epic');
+      reopenCurrent();
+      break;
+
+    case 'airport_shuttle':
+      if (!spend(400)) return;
+      advanceTime(240);
+      changeStat('mood', 22);
+      changeStat('energy', -15);
+      gainXp(55, 'air_shuttle');
+      notify('🛫 Shuttle flight: you closed deals from seat 14B.', 'epic');
+      reopenCurrent();
+      break;
+    case 'airport_redeye':
+      if (!spend(1500)) return;
+      advanceTime(360);
+      changeStat('energy', -22);
+      changeStat('mood', 18);
+      gainXp(120, 'air_redeye');
+      notify('🌙 Red-eye deal trip. Your soul is carry-on only.', 'epic');
+      reopenCurrent();
+      break;
+
     case 'butler':
       if (!spend(2000)) return;
       changeStat('mood', 25);
@@ -1593,6 +1865,10 @@ function gainXp(amt, key) {
 
 function cartPay() {
   return Math.floor(8 + Math.random() * 6 + state.careerLevel * 2);
+}
+
+function truckPay() {
+  return Math.floor(12 + Math.random() * 10 + state.careerLevel * 3);
 }
 
 function jobPay() {

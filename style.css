@@ -1382,6 +1382,78 @@ kbd {
     linear-gradient(180deg, #6b3a65 0%, #4a2545 100%);
 }
 
+.theme-bakery {
+  --wall-color: #c9a87c;
+  --wall-shadow: #6b5344;
+  --floor-color: #8b7355;
+  --accent-color: #ffe4b5;
+  --ceiling-color: #4a3d32;
+  --ambient: rgba(255, 220, 160, 0.25);
+}
+
+.theme-subway {
+  --wall-color: #2d3d44;
+  --wall-shadow: #1a2528;
+  --floor-color: #3a4a52;
+  --accent-color: #5bc0de;
+  --ceiling-color: #1a2228;
+  --ambient: rgba(80, 180, 220, 0.15);
+}
+
+.theme-theater {
+  --wall-color: #5a2a38;
+  --wall-shadow: #2a1218;
+  --floor-color: #4a2830;
+  --accent-color: #ffd700;
+  --ceiling-color: #1a0a10;
+  --ambient: rgba(255, 200, 80, 0.2);
+}
+
+.theme-arcade {
+  --wall-color: #2a1a4a;
+  --wall-shadow: #12082a;
+  --floor-color: #3a2080;
+  --accent-color: #ff2e97;
+  --ceiling-color: #0a0518;
+  --ambient: rgba(255, 50, 200, 0.18);
+}
+
+.theme-hotel {
+  --wall-color: #5a6070;
+  --wall-shadow: #2a3038;
+  --floor-color: #4a5058;
+  --accent-color: #e8d5b0;
+  --ceiling-color: #2a3038;
+  --ambient: rgba(255, 245, 220, 0.15);
+}
+
+.theme-food_truck {
+  --wall-color: #8a3a2a;
+  --wall-shadow: #4a1a12;
+  --floor-color: #6a3020;
+  --accent-color: #ff9a3c;
+  --ceiling-color: #3a1810;
+  --ambient: rgba(255, 120, 60, 0.22);
+}
+
+.theme-museum {
+  --wall-color: #c4b89a;
+  --wall-shadow: #6a6050;
+  --floor-color: #8a8068;
+  --accent-color: #2a4a6a;
+  --ceiling-color: #4a4438;
+  --ambient: rgba(200, 210, 230, 0.18);
+}
+
+.theme-airport {
+  --wall-color: #a8b8c8;
+  --wall-shadow: #506070;
+  --floor-color: #708090;
+  --accent-color: #4a90d9;
+  --ceiling-color: #384858;
+  --ambient: rgba(150, 200, 255, 0.2);
+}
+
 /* ============== WIN SCREEN ============== */
 .win-screen {
   position: fixed;
