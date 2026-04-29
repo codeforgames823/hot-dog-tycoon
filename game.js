@@ -612,10 +612,17 @@ function startGame(continueGame) {
   renderOutfit();
   elCity.style.width = WORLD_WIDTH + 'px';
 
+  // Boot the first-person 3D overworld. game-3d.js exposes window.fpvOverworld
+  // and replaces the 2D side-scroller with a Three.js scene.
+  if (window.fpvOverworld) {
+    window.fpvOverworld.init();
+    window.fpvOverworld.show();
+  }
+
   if (resumed) {
     notify(`Welcome back, ${CAREERS[state.careerLevel].title}! Day ${state.day} resumed.`, 'epic');
   } else {
-    notify('Welcome to the megacity strip! 🌭 Hit the cart, bakery, subway — press W to enter buildings.', 'epic');
+    notify('Welcome to the city! Click to capture mouse, WASD to walk, E to enter buildings. 🌭', 'epic');
   }
 
   // Autosave every 10 seconds
@@ -719,11 +726,23 @@ function setupInput() {
       e.preventDefault();
     }
     const wasOutside = !state.interiorBuildingId;
-    // Outside: W/Space/Up to enter building
-    if (wasOutside && (k === 'w' || k === ' ' || k === 'arrowup')) {
-      tryEnterBuilding();
+    const fpvActive = window.fpvOverworld && window.fpvOverworld.isActive();
+
+    if (wasOutside) {
+      if (fpvActive) {
+        // FPV overworld: E enters the building under the crosshair / nearest.
+        // W is reserved for forward walking, never auto-enters.
+        if (k === 'e' && window.fpvOverworld.hasNearest()) {
+          window.fpvOverworld.enterNearest();
+        }
+      } else {
+        // Legacy 2D side-scroller: W/Space/Up enters nearest building.
+        if (k === 'w' || k === ' ' || k === 'arrowup') {
+          tryEnterBuilding();
+        }
+      }
     }
-    // Inside: E only to use station (avoid same key triggering enter+use)
+    // Inside: E only to use station (same in both modes)
     if (!wasOutside && k === 'e') {
       tryUseStation();
     }
@@ -749,6 +768,10 @@ function loop(now) {
   if (!state.hasWon) {
     update(dt);
     render();
+    // 3D overworld renders after the 2D HUD/state pass so it can use updated state
+    if (window.fpvOverworld && window.fpvOverworld.isActive()) {
+      window.fpvOverworld.updateFrame(dt);
+    }
   }
   requestAnimationFrame(loop);
 }
@@ -792,8 +815,12 @@ function update(dt) {
       }
       state._hadActiveCooldown = cdNow;
     }
+  } else if (window.fpvOverworld && window.fpvOverworld.isActive()) {
+    // ----- 3D OVERWORLD -----
+    // game-3d.js drives playerWorldX directly via syncWorldX(). Nothing to do
+    // here besides stat/time/stock progression (handled below).
   } else {
-    // ----- OVERWORLD MOVEMENT -----
+    // ----- OVERWORLD MOVEMENT (legacy 2D side-scroller) -----
     const speed = 240;
     let move = 0;
     if (!inputBlocked) {
@@ -857,13 +884,17 @@ function update(dt) {
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 function render() {
-  // Overworld
-  elCity.style.transform = `translateX(${-state.cameraX}px)`;
-  elNpcs.style.transform = `translateX(${-state.cameraX}px)`;
-  elPlayer.style.left = (state.playerWorldX - state.cameraX) + 'px';
-  elPlayer.style.transform = 'translateX(-50%)';
-  elPlayer.classList.toggle('facing-left', state.facing < 0);
-  elPlayer.classList.toggle('walking', state.walking);
+  const fpvActive = window.fpvOverworld && window.fpvOverworld.isActive();
+  // Overworld DOM is only used in legacy 2D mode. game-3d.js owns the rendering
+  // when FPV is active.
+  if (!fpvActive) {
+    elCity.style.transform = `translateX(${-state.cameraX}px)`;
+    elNpcs.style.transform = `translateX(${-state.cameraX}px)`;
+    elPlayer.style.left = (state.playerWorldX - state.cameraX) + 'px';
+    elPlayer.style.transform = 'translateX(-50%)';
+    elPlayer.classList.toggle('facing-left', state.facing < 0);
+    elPlayer.classList.toggle('walking', state.walking);
+  }
 
   // Interior
   if (state.interiorBuildingId) {
@@ -2398,4 +2429,13 @@ async function submitScore() {
 }
 
 // ---------- BOOT ----------
+// Publish the cross-script symbols game-3d.js (an ES module) needs.
+// Top-level `const` in a regular script is in the global lexical env but not
+// on `window`, so modules can't reach it without explicit publishing.
+window.state = state;
+window.BUILDING_DEFS = BUILDING_DEFS;
+window.WORLD_WIDTH = WORLD_WIDTH;
+window.keys = keys;
+window.enterInterior = enterInterior;
+
 init();

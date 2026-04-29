@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Hot Dog Tycoon — From Bun to Boardroom</title>
 <link rel="stylesheet" href="style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+  }
+}
+</script>
 </head>
 <body>
 
@@ -112,6 +120,22 @@
 
   <!-- World -->
   <main id="world" class="world">
+    <!-- 3D first-person view (Three.js) -->
+    <canvas id="three-canvas" class="three-canvas hidden"></canvas>
+    <div id="crosshair" class="crosshair hidden">+</div>
+    <div id="fpvHint" class="fpv-hint hidden">
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk &nbsp;·&nbsp;
+      <kbd>Mouse</kbd> look &nbsp;·&nbsp;
+      <kbd>E</kbd> enter building &nbsp;·&nbsp;
+      <kbd>Esc</kbd> release mouse
+    </div>
+    <div id="lockOverlay" class="lock-overlay hidden">
+      <div class="lock-card">
+        <h2>Click to play</h2>
+        <p>Mouse will be captured for first-person look. Press <kbd>Esc</kbd> any time to release.</p>
+      </div>
+    </div>
+
     <div id="sky" class="sky"></div>
     <div id="stars" class="stars"></div>
     <div id="sun" class="sun"></div>
@@ -275,5 +299,6 @@
 </div>
 
 <script src="game.js"></script>
+<script type="module" src="game-3d.js"></script>
 </body>
 </html>
