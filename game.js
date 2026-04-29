@@ -547,8 +547,10 @@ const elNpcs = $('npcs');
 
 // ---------- ISO 3D CONSTANTS ----------
 // Tilt of the city stage (positive = top tilts away from viewer).
+// 50deg = "overhead street view" — high camera looking down the strip,
+// roofs are prominent and the road foreshortens hard.
 // Sprites (player, NPCs) counter-rotate by -ISO_TILT to stay upright (billboards).
-const ISO_TILT = 28;
+const ISO_TILT = 50;
 const elNotifs = $('notifications');
 const elModal = $('modal');
 const elModalBody = $('modalBody');
