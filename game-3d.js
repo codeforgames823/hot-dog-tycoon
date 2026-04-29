@@ -209,6 +209,12 @@ function buildBuildings() {
     const sideOffset = ROAD_WIDTH / 2 + SIDEWALK_WIDTH + d / 2 + 0.5;
     const z = sideSign * sideOffset;
 
+    // ----- PARK: render as open green plot + trees instead of a box -----
+    if (def.id === 'park') {
+      buildPark(def, x, z, w, d);
+      return;
+    }
+
     const tex = makeBuildingTexture(def, false);
     const litTex = makeBuildingTexture(def, true);
 
@@ -269,6 +275,109 @@ function buildBuildings() {
 
     fpv.litMaterials.push(wallMat);
   });
+}
+
+// Park: open grass plot with low-poly trees, walk-through, still enterable.
+function buildPark(def, x, z, w, d) {
+  // Grass plot (slightly brighter than world grass so it reads as "the park")
+  const plotGeom = new THREE.PlaneGeometry(w, d);
+  const plotMat = new THREE.MeshLambertMaterial({ color: 0x7ab94a });
+  const plot = new THREE.Mesh(plotGeom, plotMat);
+  plot.rotation.x = -Math.PI / 2;
+  plot.position.set(x, 0.05, z);
+  fpv.scene.add(plot);
+
+  // Curb: a thin lighter strip around the plot edge
+  const curbMat = new THREE.MeshLambertMaterial({ color: 0xa6a6a6 });
+  for (const [cw, cd, ox, oz] of [
+    [w + 0.6, 0.4, 0, -d / 2 - 0.2],
+    [w + 0.6, 0.4, 0,  d / 2 + 0.2],
+    [0.4, d + 0.6, -w / 2 - 0.2, 0],
+    [0.4, d + 0.6,  w / 2 + 0.2, 0],
+  ]) {
+    const cGeom = new THREE.PlaneGeometry(cw, cd);
+    const c = new THREE.Mesh(cGeom, curbMat);
+    c.rotation.x = -Math.PI / 2;
+    c.position.set(x + ox, 0.06, z + oz);
+    fpv.scene.add(c);
+  }
+
+  // Trees: scattered cone+cylinder; deterministic seed so layout is stable
+  const seedRand = mulberry32(def.x);
+  const treeCount = 7;
+  for (let t = 0; t < treeCount; t++) {
+    const tree = makeTree();
+    const tx = x + (seedRand() - 0.5) * w * 0.78;
+    const tz = z + (seedRand() - 0.5) * d * 0.78;
+    tree.position.set(tx, 0, tz);
+    tree.scale.setScalar(0.85 + seedRand() * 0.5);
+    fpv.scene.add(tree);
+  }
+
+  // A picnic bench in the middle for flavor
+  const benchMat = new THREE.MeshLambertMaterial({ color: 0x6b3e1a });
+  const benchTop = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.1, 0.5), benchMat);
+  benchTop.position.set(x, 0.6, z);
+  fpv.scene.add(benchTop);
+  const legGeom = new THREE.BoxGeometry(0.1, 0.6, 0.5);
+  for (const lx of [-1.0, 1.0]) {
+    const leg = new THREE.Mesh(legGeom, benchMat);
+    leg.position.set(x + lx, 0.3, z);
+    fpv.scene.add(leg);
+  }
+
+  // Floating sign so you know it's enterable
+  const nameSpr = makeTextSprite(def.icon + ' ' + def.name);
+  nameSpr.position.set(x, 4.5, z);
+  nameSpr.visible = false;
+  fpv.scene.add(nameSpr);
+
+  fpv.buildings.push({
+    def,
+    mesh: plot,
+    doorPos: new THREE.Vector3(x, 0, z),
+    enterPos: new THREE.Vector3(x, PLAYER_HEIGHT, z),
+    halfW: w / 2,
+    halfD: d / 2,
+    x, z, w, d, h: 0.1,
+    sideSign: 0,
+    nameSprite: nameSpr,
+    wallMat: null,
+    walkable: true, // park is open ground; collidesAt() skips it
+  });
+}
+
+function makeTree() {
+  const tree = new THREE.Group();
+  const trunkGeom = new THREE.CylinderGeometry(0.22, 0.32, 1.6, 8);
+  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b3e1a });
+  const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+  trunk.position.y = 0.8;
+  tree.add(trunk);
+
+  const folGeom = new THREE.ConeGeometry(1.3, 2.6, 8);
+  const folMat = new THREE.MeshLambertMaterial({ color: 0x2f7a36 });
+  const foliage = new THREE.Mesh(folGeom, folMat);
+  foliage.position.y = 2.6;
+  tree.add(foliage);
+
+  const folGeom2 = new THREE.ConeGeometry(1.0, 1.6, 8);
+  const foliage2 = new THREE.Mesh(folGeom2, folMat);
+  foliage2.position.y = 3.6;
+  tree.add(foliage2);
+
+  return tree;
+}
+
+// Tiny seedable PRNG so park layout is the same every load (no jitter on save/resume).
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return function () {
+    t = (t + 0x6D2B79F5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 // Procedural texture: facade with windows + door for a building.
@@ -528,6 +637,7 @@ function tryMoveAxis(pos, dx, dz) {
 function collidesAt(x, z) {
   // AABB vs every building (cheap, n=24)
   for (const b of fpv.buildings) {
+    if (b.walkable) continue; // open spaces (e.g. the park) are walk-through
     const localX = x - b.x;
     const localZ = z - b.z;
     if (Math.abs(localX) < b.halfW + PLAYER_RADIUS &&
