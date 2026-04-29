@@ -320,9 +320,9 @@ kbd {
   overflow: hidden;
   background: linear-gradient(180deg, #87ceeb 0%, #ffd6a5 70%, #d4a574 100%);
   transition: background 2s;
-  /* iso 3D overworld setup — overhead street view */
-  perspective: 1100px;
-  perspective-origin: 50% 28%;
+  /* iso 3D overworld setup */
+  perspective: 1400px;
+  perspective-origin: 50% 35%;
 }
 
 /* ============== ISO 3D STAGE ============== */
@@ -330,9 +330,7 @@ kbd {
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
-  /* Pivot at the front of the street so the road / sidewalk recede upward
-     and back into the distance. */
-  transform-origin: 50% 80%;
+  transform-origin: 50% 78%;
   will-change: transform;
   /* JS sets transform per frame: translateX(-cameraX) rotateX(ISO_TILT) */
 }
