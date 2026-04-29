@@ -110,31 +110,33 @@ const CAREERS = [
 ];
 
 // ---------- BUILDINGS (city overworld) ----------
+// z = depth offset (negative = back row, positive = front row).
+// depth = thickness of the building cuboid (used for the side & top faces).
 const BUILDING_DEFS = [
-  { id: 'home',       name: 'Tiny Apartment',       icon: '🏠', color: '#a87858', windows: [3,2], height: 200, x: 200 },
-  { id: 'cart',       name: "Frank's Hot Dog Cart", icon: '🌭', color: '#ff7a59', windows: [1,1], height: 100, x: 520 },
-  { id: 'bakery',     name: 'Golden Bun Bakery',    icon: '🥐', color: '#d4a574', windows: [2,2], height: 170, x: 860 },
-  { id: 'diner',      name: "Mama's Diner",         icon: '🍔', color: '#d4584a', windows: [3,2], height: 220, x: 1200 },
-  { id: 'gym',        name: 'Iron Bun Gym',         icon: '💪', color: '#5a7a8a', windows: [4,3], height: 280, x: 1560 },
-  { id: 'park',       name: 'Central Park',         icon: '🌳', color: '#4a7a3a', windows: [0,0], height: 80,  x: 1920 },
-  { id: 'office',     name: 'Mustard Corp Office',  icon: '🏢', color: '#7a8aa0', windows: [4,5], height: 360, x: 2280 },
-  { id: 'bank',       name: 'First National Bun',   icon: '🏦', color: '#cab87a', windows: [4,4], height: 320, x: 2700 },
-  { id: 'shop',       name: 'Dapper Dog Outfits',   icon: '👔', color: '#9b6ab8', windows: [3,2], height: 240, x: 3120 },
-  { id: 'bar',        name: 'The Relish Lounge',    icon: '🍻', color: '#5a4080', windows: [3,2], height: 200, x: 3520 },
-  { id: 'subway',     name: 'Metro Bun Terminal',   icon: '🚇', color: '#3a5058', windows: [3,4], height: 260, x: 3920 },
-  { id: 'university', name: 'Bun University',       icon: '🎓', color: '#8b5a8b', windows: [5,4], height: 340, x: 4360 },
-  { id: 'hospital',   name: 'Sausage General',      icon: '🏥', color: '#e8eef4', windows: [4,5], height: 360, x: 4780 },
-  { id: 'theater',    name: 'Wiener Theater',       icon: '🎭', color: '#8a4a5a', windows: [4,3], height: 300, x: 5200 },
-  { id: 'casino',     name: 'Lucky Frank Casino',   icon: '🎰', color: '#5a1a1a', windows: [5,3], height: 280, x: 5620 },
-  { id: 'arcade',     name: 'Pixel Bun Arcade',     icon: '👾', color: '#4a3a7a', windows: [3,3], height: 220, x: 6040 },
-  { id: 'stocks',     name: 'Stock Exchange',       icon: '📈', color: '#1a3a4a', windows: [5,5], height: 380, x: 6460 },
-  { id: 'hotel',      name: 'Grand Bun Hotel',      icon: '🏨', color: '#6a7a8a', windows: [4,6], height: 340, x: 6900 },
-  { id: 'factory',    name: 'Hot Dog Factory',      icon: '🏭', color: '#5a5045', windows: [3,2], height: 260, x: 7340 },
-  { id: 'food_truck', name: 'Rolling Frank Truck',  icon: '🚚', color: '#e85a3a', windows: [2,1], height: 140, x: 7760 },
-  { id: 'museum',     name: 'Mustard Museum',       icon: '🖼️', color: '#c4b89a', windows: [4,3], height: 280, x: 8140 },
-  { id: 'mansion',    name: 'Wiener Mansion',       icon: '🏰', color: '#6b3a65', windows: [6,4], height: 380, x: 8560 },
-  { id: 'airport',    name: 'Frankfurter Intl',     icon: '✈️', color: '#8aa4c4', windows: [5,5], height: 360, x: 8980 },
-  { id: 'tower',      name: 'Frankfurter Tower',    icon: '🗼', color: '#e8b04a', windows: [5,9], height: 520, x: 9420 },
+  { id: 'home',       name: 'Tiny Apartment',       icon: '🏠', color: '#a87858', windows: [3,2], height: 200, x: 200,  z:    0, depth: 90 },
+  { id: 'cart',       name: "Frank's Hot Dog Cart", icon: '🌭', color: '#ff7a59', windows: [1,1], height: 100, x: 520,  z:   60, depth: 60 },
+  { id: 'bakery',     name: 'Golden Bun Bakery',    icon: '🥐', color: '#d4a574', windows: [2,2], height: 170, x: 860,  z:  -70, depth: 80 },
+  { id: 'diner',      name: "Mama's Diner",         icon: '🍔', color: '#d4584a', windows: [3,2], height: 220, x: 1200, z:    0, depth: 100 },
+  { id: 'gym',        name: 'Iron Bun Gym',         icon: '💪', color: '#5a7a8a', windows: [4,3], height: 280, x: 1560, z:   60, depth: 110 },
+  { id: 'park',       name: 'Central Park',         icon: '🌳', color: '#4a7a3a', windows: [0,0], height: 80,  x: 1920, z:    0, depth: 120 },
+  { id: 'office',     name: 'Mustard Corp Office',  icon: '🏢', color: '#7a8aa0', windows: [4,5], height: 360, x: 2280, z:  -90, depth: 130 },
+  { id: 'bank',       name: 'First National Bun',   icon: '🏦', color: '#cab87a', windows: [4,4], height: 320, x: 2700, z:    0, depth: 120 },
+  { id: 'shop',       name: 'Dapper Dog Outfits',   icon: '👔', color: '#9b6ab8', windows: [3,2], height: 240, x: 3120, z:   50, depth: 90 },
+  { id: 'bar',        name: 'The Relish Lounge',    icon: '🍻', color: '#5a4080', windows: [3,2], height: 200, x: 3520, z:    0, depth: 90 },
+  { id: 'subway',     name: 'Metro Bun Terminal',   icon: '🚇', color: '#3a5058', windows: [3,4], height: 260, x: 3920, z:  -80, depth: 110 },
+  { id: 'university', name: 'Bun University',       icon: '🎓', color: '#8b5a8b', windows: [5,4], height: 340, x: 4360, z:  -60, depth: 130 },
+  { id: 'hospital',   name: 'Sausage General',      icon: '🏥', color: '#e8eef4', windows: [4,5], height: 360, x: 4780, z:    0, depth: 120 },
+  { id: 'theater',    name: 'Wiener Theater',       icon: '🎭', color: '#8a4a5a', windows: [4,3], height: 300, x: 5200, z: -100, depth: 110 },
+  { id: 'casino',     name: 'Lucky Frank Casino',   icon: '🎰', color: '#5a1a1a', windows: [5,3], height: 280, x: 5620, z:   40, depth: 110 },
+  { id: 'arcade',     name: 'Pixel Bun Arcade',     icon: '👾', color: '#4a3a7a', windows: [3,3], height: 220, x: 6040, z:    0, depth: 100 },
+  { id: 'stocks',     name: 'Stock Exchange',       icon: '📈', color: '#1a3a4a', windows: [5,5], height: 380, x: 6460, z: -100, depth: 140 },
+  { id: 'hotel',      name: 'Grand Bun Hotel',      icon: '🏨', color: '#6a7a8a', windows: [4,6], height: 340, x: 6900, z:    0, depth: 130 },
+  { id: 'factory',    name: 'Hot Dog Factory',      icon: '🏭', color: '#5a5045', windows: [3,2], height: 260, x: 7340, z:   60, depth: 120 },
+  { id: 'food_truck', name: 'Rolling Frank Truck',  icon: '🚚', color: '#e85a3a', windows: [2,1], height: 140, x: 7760, z:   80, depth: 70 },
+  { id: 'museum',     name: 'Mustard Museum',       icon: '🖼️', color: '#c4b89a', windows: [4,3], height: 280, x: 8140, z:  -80, depth: 120 },
+  { id: 'mansion',    name: 'Wiener Mansion',       icon: '🏰', color: '#6b3a65', windows: [6,4], height: 380, x: 8560, z:    0, depth: 150 },
+  { id: 'airport',    name: 'Frankfurter Intl',     icon: '✈️', color: '#8aa4c4', windows: [5,5], height: 360, x: 8980, z:  -90, depth: 140 },
+  { id: 'tower',      name: 'Frankfurter Tower',    icon: '🗼', color: '#e8b04a', windows: [5,9], height: 520, x: 9420, z:    0, depth: 160 },
 ];
 
 const WORLD_WIDTH = 10200;
@@ -538,9 +540,15 @@ const $ = (id) => document.getElementById(id);
 const elIntro = $('intro');
 const elGame = $('game');
 const elWorld = $('world');
+const elCityStage = $('cityStage');
 const elCity = $('city');
 const elPlayer = $('player');
 const elNpcs = $('npcs');
+
+// ---------- ISO 3D CONSTANTS ----------
+// Tilt of the city stage (positive = top tilts away from viewer).
+// Sprites (player, NPCs) counter-rotate by -ISO_TILT to stay upright (billboards).
+const ISO_TILT = 28;
 const elNotifs = $('notifications');
 const elModal = $('modal');
 const elModalBody = $('modalBody');
@@ -629,26 +637,48 @@ function startGame(continueGame) {
 // ---------- CITY GENERATION ----------
 function buildCity() {
   elCity.innerHTML = '';
+  elCity.style.width = WORLD_WIDTH + 'px';
+
+  // Stretch the ground strips across the whole world so they remain visible
+  // after the iso tilt (they used to be viewport-width).
+  document.querySelectorAll('.sidewalk, .road, .road-lines').forEach(el => {
+    el.style.width = WORLD_WIDTH + 'px';
+  });
+
   BUILDING_DEFS.forEach(def => {
+    const w = 140 + (def.windows[0] * 8);
+    const h = def.height;
+    const depth = def.depth || 90;
+    const z = def.z || 0;
+    const isPark = def.id === 'park';
+
+    // ---- Building cuboid root ----
     const b = document.createElement('div');
     b.className = 'building';
     b.dataset.id = def.id;
+    b.dataset.row = z < -30 ? 'back' : z > 30 ? 'front' : 'mid';
     b.style.left = def.x + 'px';
-    b.style.position = 'absolute';
-    b.style.background = `linear-gradient(180deg, ${shade(def.color, 1.1)}, ${shade(def.color, 0.6)})`;
-    b.style.height = def.height + 'px';
-    const w = 140 + (def.windows[0] * 8);
     b.style.width = w + 'px';
+    b.style.height = h + 'px';
+    b.style.transform = `translateZ(${z}px)`;
 
+    // Hover label (kept outside faces so it sits above the whole box)
     const name = document.createElement('div');
     name.className = 'building-name';
     name.textContent = def.icon + ' ' + def.name;
     b.appendChild(name);
 
+    // ---- Front face (the original visual: gradient, windows, door, icon) ----
+    const front = document.createElement('div');
+    front.className = 'bf front';
+    front.style.background = isPark
+      ? 'linear-gradient(180deg, #6ba84a, #4a7a3a)'
+      : `linear-gradient(180deg, ${shade(def.color, 1.1)}, ${shade(def.color, 0.6)})`;
+
     const ic = document.createElement('div');
     ic.className = 'building-icon';
     ic.textContent = def.icon;
-    b.appendChild(ic);
+    front.appendChild(ic);
 
     if (def.windows[0] > 0) {
       const winGrid = document.createElement('div');
@@ -662,23 +692,40 @@ function buildCity() {
         if (Math.random() < 0.3) win.classList.add('dark');
         winGrid.appendChild(win);
       }
-      b.appendChild(winGrid);
+      front.appendChild(winGrid);
     }
 
-    if (def.id !== 'park') {
+    if (!isPark) {
       const door = document.createElement('div');
       door.className = 'door';
-      b.appendChild(door);
+      front.appendChild(door);
     } else {
-      // Park gets trees instead
-      b.style.background = `linear-gradient(180deg, #6ba84a, #4a7a3a)`;
       for (let i = 0; i < 3; i++) {
         const tree = document.createElement('div');
         tree.style.cssText = `position:absolute;bottom:0;left:${i*40+10}px;font-size:48px;`;
         tree.textContent = '🌳';
-        b.appendChild(tree);
+        front.appendChild(tree);
       }
     }
+    b.appendChild(front);
+
+    // ---- Right side face (extruded backward via rotateY) ----
+    const side = document.createElement('div');
+    side.className = 'bf side';
+    side.style.width = depth + 'px';
+    side.style.background = isPark
+      ? 'linear-gradient(180deg, #5a8a3a, #3a6a2a)'
+      : `linear-gradient(180deg, ${shade(def.color, 0.85)}, ${shade(def.color, 0.45)})`;
+    b.appendChild(side);
+
+    // ---- Top face (roof) ----
+    const top = document.createElement('div');
+    top.className = 'bf top';
+    top.style.height = depth + 'px';
+    top.style.background = isPark
+      ? 'linear-gradient(180deg, #6ba84a, #4a7a3a)'
+      : shade(def.color, 1.25);
+    b.appendChild(top);
 
     elCity.appendChild(b);
   });
@@ -703,6 +750,9 @@ function spawnNpcs() {
     n.className = 'npc';
     n.textContent = NPC_EMOJIS[Math.floor(Math.random() * NPC_EMOJIS.length)];
     n.dataset.x = Math.random() * WORLD_WIDTH;
+    // Small Z spread so NPCs aren't all on the same line; range matches the
+    // building stagger so it actually reads as depth.
+    n.dataset.z = Math.floor((Math.random() - 0.5) * 110);
     n.dataset.speed = (Math.random() * 0.4 + 0.1) * (Math.random() < 0.5 ? -1 : 1);
     n.dataset.bob = Math.random() * Math.PI * 2;
     elNpcs.appendChild(n);
@@ -857,11 +907,14 @@ function update(dt) {
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 function render() {
-  // Overworld
-  elCity.style.transform = `translateX(${-state.cameraX}px)`;
-  elNpcs.style.transform = `translateX(${-state.cameraX}px)`;
-  elPlayer.style.left = (state.playerWorldX - state.cameraX) + 'px';
-  elPlayer.style.transform = 'translateX(-50%)';
+  // ---- ISO 3D OVERWORLD ----
+  // Camera scroll + iso tilt live on the single stage. Everything inside is in
+  // world coords; the stage handles the projection.
+  elCityStage.style.transform = `translateX(${-state.cameraX}px) rotateX(${ISO_TILT}deg)`;
+  // Player lives at its absolute world X inside the stage; counter-rotate so
+  // the sprite stays upright (billboard) instead of leaning back with the stage.
+  elPlayer.style.left = state.playerWorldX + 'px';
+  elPlayer.style.transform = `translateX(-50%) rotateX(${-ISO_TILT}deg)`;
   elPlayer.classList.toggle('facing-left', state.facing < 0);
   elPlayer.classList.toggle('walking', state.walking);
 
@@ -941,11 +994,21 @@ function setBar(id, val) {
 let nearestBuilding = null;
 function updateBuildingProximity() {
   let near = null;
-  let bestDist = 130;
+  // Bigger trigger radius now that buildings can be staggered in z.
+  let bestDist = 170;
+  // Player is on the front row (z = 0).
+  const px = state.playerWorldX;
+  const pz = 0;
   BUILDING_DEFS.forEach(def => {
     const w = 140 + (def.windows[0] * 8);
+    const depth = def.depth || 90;
     const cx = def.x + w / 2;
-    const d = Math.abs(cx - state.playerWorldX);
+    // Building's nearest face in z: z is its front edge, z - depth is its back edge.
+    // Front-row buildings (z>0) reach toward the player, back-row (z<0) sit behind.
+    const cz = (def.z || 0) - depth / 2;
+    const dx = cx - px;
+    const dz = cz - pz;
+    const d = Math.hypot(dx, dz);
     if (d < bestDist) {
       bestDist = d;
       near = def;
@@ -975,6 +1038,7 @@ function tryEnterBuilding() {
 function updateNpcs(dt) {
   document.querySelectorAll('.npc').forEach(n => {
     let x = parseFloat(n.dataset.x);
+    let z = parseFloat(n.dataset.z) || 0;
     let speed = parseFloat(n.dataset.speed);
     let bob = parseFloat(n.dataset.bob);
     x += speed * dt * 60;
@@ -984,7 +1048,10 @@ function updateNpcs(dt) {
     n.dataset.x = x;
     n.dataset.bob = bob;
     n.style.left = x + 'px';
-    n.style.transform = `translateY(${Math.sin(bob) * 3}px) scaleX(${speed > 0 ? 1 : -1})`;
+    // translateZ(z) lifts NPC into a depth row; rotateX counter-tilts so the
+    // emoji stays upright (billboard) inside the tilted city stage.
+    n.style.transform =
+      `translateZ(${z}px) translateY(${Math.sin(bob) * 3}px) scaleX(${speed > 0 ? 1 : -1}) rotateX(${-ISO_TILT}deg)`;
   });
 }
 

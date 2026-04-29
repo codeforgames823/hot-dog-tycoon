@@ -320,6 +320,19 @@ kbd {
   overflow: hidden;
   background: linear-gradient(180deg, #87ceeb 0%, #ffd6a5 70%, #d4a574 100%);
   transition: background 2s;
+  /* iso 3D overworld setup */
+  perspective: 1400px;
+  perspective-origin: 50% 35%;
+}
+
+/* ============== ISO 3D STAGE ============== */
+.city-stage {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: 50% 78%;
+  will-change: transform;
+  /* JS sets transform per frame: translateX(-cameraX) rotateX(ISO_TILT) */
 }
 
 .world.evening {
@@ -418,29 +431,80 @@ kbd {
   position: absolute;
   bottom: 130px;
   left: 0;
-  width: 4500px;
+  width: 4500px;       /* JS overrides to WORLD_WIDTH */
   height: 380px;
-  display: flex;
-  align-items: flex-end;
-  gap: 0;
-  transition: transform 0.3s ease-out;
+  transform-style: preserve-3d;
 }
 
 .building {
-  position: relative;
-  flex-shrink: 0;
-  border: 3px solid #1a1a1a;
-  border-bottom: none;
+  position: absolute;
+  bottom: 0;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transition: filter 0.2s;
+  /* JS sets: left, width, height + transform: translateZ(z) */
+}
+
+.building.near .bf.front {
+  filter: brightness(1.18) drop-shadow(0 0 18px gold);
+}
+.building.near .bf.side,
+.building.near .bf.top {
+  filter: brightness(1.05);
+}
+
+/* Depth fog: back-row buildings sit further away — desaturate + dim slightly */
+.building[data-row="back"] .bf.front,
+.building[data-row="back"] .bf.side {
+  filter: brightness(0.86) saturate(0.9);
+}
+.building[data-row="front"] .bf.front {
+  filter: brightness(1.05);
+}
+.building[data-row="back"].near .bf.front {
+  filter: brightness(1.10) saturate(0.95) drop-shadow(0 0 18px gold);
+}
+.building[data-row="front"].near .bf.front {
+  filter: brightness(1.22) drop-shadow(0 0 18px gold);
+}
+
+/* Building cuboid faces */
+.bf {
+  position: absolute;
+  background-size: cover;
+  backface-visibility: hidden;
+  border: 2px solid #1a1a1a;
+}
+
+.bf.front {
+  inset: 0;
   border-radius: 8px 8px 0 0;
   display: flex;
   flex-direction: column;
-  cursor: pointer;
-  transition: filter 0.2s, transform 0.2s;
+  /* gradient + windows + door + icon all live here, just like before */
 }
 
-.building.near {
-  filter: brightness(1.2) drop-shadow(0 0 20px gold);
-  transform: translateY(-3px);
+.bf.side {
+  /* placed at building's right edge, swung 90deg around Y to extend backward */
+  top: 0;
+  left: 100%;
+  height: 100%;
+  /* JS: width = depth */
+  transform-origin: 0 50% 0;
+  transform: rotateY(90deg);
+  border-left: none;
+}
+
+.bf.top {
+  /* placed at building's top edge, tilted to lay flat as the roof */
+  top: 0;
+  left: 0;
+  width: 100%;
+  /* JS: height = depth */
+  transform-origin: 50% 0 0;
+  transform: rotateX(-90deg);
+  border-top: none;
+  border-bottom: 2px solid #1a1a1a;
 }
 
 .building-name {
@@ -459,6 +523,7 @@ kbd {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s;
+  z-index: 5;
 }
 
 .building.near .building-name { opacity: 1; }
@@ -522,11 +587,12 @@ kbd {
 }
 
 /* ============== STREET ============== */
+/* Ground strips live INSIDE the iso stage; JS sets width = WORLD_WIDTH */
 .sidewalk {
   position: absolute;
   bottom: 80px;
   left: 0;
-  right: 0;
+  width: 4500px;
   height: 50px;
   background: repeating-linear-gradient(
     90deg,
@@ -537,24 +603,22 @@ kbd {
   );
   border-top: 3px solid #888;
   border-bottom: 3px solid #555;
-  z-index: 2;
 }
 
 .road {
   position: absolute;
   bottom: 0;
   left: 0;
-  right: 0;
+  width: 4500px;
   height: 80px;
   background: linear-gradient(180deg, #2a2a2a, #1a1a1a);
-  z-index: 1;
 }
 
 .road-lines {
   position: absolute;
   bottom: 38px;
   left: 0;
-  right: 0;
+  width: 4500px;
   height: 4px;
   background: repeating-linear-gradient(
     90deg,
@@ -563,7 +627,6 @@ kbd {
     transparent 30px,
     transparent 60px
   );
-  z-index: 1;
 }
 
 /* ============== PLAYER ============== */
@@ -571,11 +634,13 @@ kbd {
   position: absolute;
   bottom: 130px;
   left: 50%;
-  transform: translateX(-50%);
   width: 70px;
   height: 100px;
   z-index: 10;
   transition: bottom 0.1s;
+  transform-style: preserve-3d;
+  transform-origin: 50% 100%;
+  /* JS sets transform per frame: translateX(-50%) rotateX(-ISO_TILT) */
 }
 
 .hotdog-svg {
@@ -659,11 +724,11 @@ kbd {
   position: absolute;
   bottom: 130px;
   left: 0;
-  width: 100%;
+  width: 4500px;       /* JS sets to WORLD_WIDTH */
   height: 100px;
   pointer-events: none;
   z-index: 9;
-  transition: transform 0.3s ease-out;
+  transform-style: preserve-3d;
 }
 
 .npc {
@@ -674,6 +739,8 @@ kbd {
   font-size: 50px;
   text-align: center;
   filter: drop-shadow(2px 3px 4px rgba(0,0,0,0.3));
+  transform-origin: 50% 100%;
+  /* JS sets per frame: translateX(...) translateZ(z) translateY(bob) scaleX(facing) rotateX(-ISO_TILT) */
 }
 
 /* ============== PARTICLES ============== */

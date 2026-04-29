@@ -122,18 +122,20 @@
       <div class="cloud c3"></div>
     </div>
 
-    <!-- City strip - buildings -->
-    <div id="city" class="city">
-      <!-- buildings injected via JS -->
-    </div>
+    <!-- 3D iso stage: tilted plane that contains the city, ground, NPCs, player -->
+    <div id="cityStage" class="city-stage">
+      <!-- City strip - buildings -->
+      <div id="city" class="city">
+        <!-- buildings injected via JS -->
+      </div>
 
-    <!-- Sidewalk -->
-    <div class="sidewalk"></div>
-    <div class="road"></div>
-    <div class="road-lines"></div>
+      <!-- Sidewalk -->
+      <div class="sidewalk"></div>
+      <div class="road"></div>
+      <div class="road-lines"></div>
 
-    <!-- Player -->
-    <div id="player" class="player">
+      <!-- Player -->
+      <div id="player" class="player">
       <div class="player-shadow"></div>
       <svg viewBox="0 0 100 140" class="hotdog-svg">
         <defs>
@@ -171,10 +173,12 @@
         <ellipse id="armR" cx="82" cy="70" rx="6" ry="10" fill="#a02e1a"/>
       </svg>
       <div id="enterPrompt" class="enter-prompt hidden">Press <kbd>W</kbd> to enter</div>
-    </div>
+      </div>
 
-    <!-- NPCs -->
-    <div id="npcs" class="npcs"></div>
+      <!-- NPCs -->
+      <div id="npcs" class="npcs"></div>
+    </div>
+    <!-- /#cityStage -->
 
     <!-- Money particles container -->
     <div id="particles" class="particles"></div>
