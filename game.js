@@ -12,7 +12,7 @@ const API_URL = (typeof window !== 'undefined' && window.HDT_API_URL)
   || (typeof localStorage !== 'undefined' && localStorage.getItem('hdt_api'))
   || ''; // empty disables global leaderboard (falls back to local)
 
-const SAVE_KEY = 'hdt_save_v3';
+const SAVE_KEY = 'hdt_save_v4';
 const LOCAL_LB_KEY = 'hdt_lb_local';
 const PLAYER_NAME_KEY = 'hdt_name';
 
@@ -30,6 +30,17 @@ const ENERGY_DRAIN = 0.012;
 const HUNGER_DRAIN = 0.010;
 // Mood drain per game-minute when stressed (high career level).
 const MOOD_DRAIN_BASE = 0.004;
+
+// Real-time cooldowns (ms) so you can’t spam free money / casino / instant actions.
+const ACTION_COOLDOWN_MS = {
+  beg: 14000,
+  sell_art: 10000,
+  arcade_ticket: 5000,
+  slots: 4000,
+  blackjack: 6000,
+  roulette: 7000,
+  high_roller: 12000,
+};
 
 // ---------- GAME STATE ----------
 const state = {
@@ -75,6 +86,11 @@ const state = {
   // Difficulty / pacing
   xpFatigue: {},                // per-day {actionKey: count} → diminishing XP returns
   sickStreak: 0,                // total days spent sick (cosmetic, for events)
+
+  // Real-time action cooldowns (action id → timestamp ms when usable again)
+  actionCooldownUntil: {},
+  _cdUiAcc: 0,                  // accumulator for throttled interior UI refresh
+  _hadActiveCooldown: false,   // so UI refreshes once when last cooldown ends
 };
 
 // ---------- CAREER LADDER ----------
@@ -764,6 +780,18 @@ function update(dt) {
       state.interiorCameraX = 0;
     }
     updateStationProximity();
+
+    // Live-update station labels while cooldowns run; one extra refresh when the last one ends
+    const cdNow = anyActionCooldownActive();
+    state._cdUiAcc += dt;
+    if (state._cdUiAcc >= 0.5) {
+      state._cdUiAcc = 0;
+      if (cdNow || state._hadActiveCooldown) {
+        refreshInterior();
+        updateStationProximity();
+      }
+      state._hadActiveCooldown = cdNow;
+    }
   } else {
     // ----- OVERWORLD MOVEMENT -----
     const speed = 240;
@@ -1010,15 +1038,60 @@ function enterInterior(buildingId) {
 
 function exitInterior() {
   state.interiorBuildingId = null;
+  state._cdUiAcc = 0;
+  state._hadActiveCooldown = false;
   nearestStation = null;
   currentStations = [];
   elInterior.classList.add('hidden');
 }
 
+function cooldownRemaining(action) {
+  const end = state.actionCooldownUntil[action];
+  if (!end) return 0;
+  const rem = end - Date.now();
+  if (rem <= 0) {
+    delete state.actionCooldownUntil[action];
+    return 0;
+  }
+  return rem;
+}
+
+function checkCooldown(action) {
+  if (!ACTION_COOLDOWN_MS[action]) return true;
+  const rem = cooldownRemaining(action);
+  if (rem <= 0) return true;
+  notify(`Wait ${Math.ceil(rem / 1000)}s… (cooldown)`, 'bad');
+  return false;
+}
+
+function startCooldown(action) {
+  const ms = ACTION_COOLDOWN_MS[action];
+  if (!ms) return;
+  state.actionCooldownUntil[action] = Date.now() + ms;
+}
+
+function anyActionCooldownActive() {
+  for (const k of Object.keys(state.actionCooldownUntil)) {
+    if (cooldownRemaining(k) > 0) return true;
+  }
+  return false;
+}
+
 function refreshInterior() {
   if (!state.interiorBuildingId) return;
   const def = BUILDING_INTERIORS[state.interiorBuildingId];
-  currentStations = def.stations();
+  currentStations = def.stations().map((s) => {
+    const ms = ACTION_COOLDOWN_MS[s.action];
+    if (!ms || s.disable) return s;
+    const rem = cooldownRemaining(s.action);
+    if (rem <= 0) return s;
+    const sec = Math.ceil(rem / 1000);
+    return {
+      ...s,
+      disable: true,
+      label: `${s.label} (${sec}s)`,
+    };
+  });
   elStations.innerHTML = currentStations.map((s, i) => `
     <div class="station-3d ${s.disable ? 'disabled' : ''}" data-idx="${i}" style="left: ${s.x}px;">
       ${s.price ? `<div class="station-price ${s.priceClass || ''}">${s.price}</div>` : ''}
@@ -1240,10 +1313,12 @@ function handleAction(action, btn) {
       reopenCurrent();
       break;
     case 'beg':
+      if (!checkCooldown('beg')) return;
       const begAmt = Math.floor(2 + Math.random() * 4);
       earn(begAmt);
       changeStat('mood', -8);
       notify(`Got $${begAmt} in pity change.`, 'bad');
+      startCooldown('beg');
       reopenCurrent();
       break;
 
@@ -1357,12 +1432,14 @@ function handleAction(action, btn) {
 
     // ----- NEW: PARK -----
     case 'sell_art':
+      if (!checkCooldown('sell_art')) return;
       const art = 5 + state.careerLevel * 2 + Math.floor(Math.random() * 8);
       earn(art);
       changeStat('mood', 8);
       gainXp(3, 'art');
       notify(`Sold a painting for $${art}!`, 'good');
       spawnParticle(`+$${art}`, 'gain');
+      startCooldown('sell_art');
       reopenCurrent();
       break;
 
@@ -1468,6 +1545,7 @@ function handleAction(action, btn) {
 
     // ----- NEW: CASINO -----
     case 'slots': {
+      if (!checkCooldown('slots')) return;
       if (!spend(10)) return;
       advanceTime(15);
       const r = Math.random();
@@ -1478,10 +1556,12 @@ function handleAction(action, btn) {
       else win = 200;
       if (win > 0) { earn(win); spawnParticle(`+$${win}`, 'gain'); notify(`🎰 SLOTS! Won $${win}`, 'good'); }
       else { notify('🎰 Slots... lost. House edge!', 'bad'); }
+      startCooldown('slots');
       reopenCurrent();
       break;
     }
     case 'blackjack': {
+      if (!checkCooldown('blackjack')) return;
       if (!spend(50)) return;
       advanceTime(20);
       const r = Math.random();
@@ -1491,10 +1571,12 @@ function handleAction(action, btn) {
       else win = 250;
       if (win > 0) { earn(win); spawnParticle(`+$${win}`, 'gain'); notify(`🃏 21! Won $${win}`, 'good'); }
       else { notify('🃏 Bust. Lost $50.', 'bad'); }
+      startCooldown('blackjack');
       reopenCurrent();
       break;
     }
     case 'roulette': {
+      if (!checkCooldown('roulette')) return;
       if (!spend(100)) return;
       advanceTime(20);
       const r = Math.random();
@@ -1504,10 +1586,12 @@ function handleAction(action, btn) {
       else win = 700;
       if (win > 0) { earn(win); spawnParticle(`+$${win}`, 'gain'); notify(`🎲 Roulette! Won $${win}`, 'good'); }
       else { notify('🎲 Wheel went the wrong way.', 'bad'); }
+      startCooldown('roulette');
       reopenCurrent();
       break;
     }
     case 'high_roller': {
+      if (!checkCooldown('high_roller')) return;
       if (!spend(1000)) return;
       advanceTime(30);
       const r = Math.random();
@@ -1517,6 +1601,7 @@ function handleAction(action, btn) {
       else win = 8000;
       if (win > 0) { earn(win); spawnParticle(`+$${win}`, 'epic'); notify(`💎 HIGH ROLLER WIN! +$${win}`, 'epic'); spawnConfetti(); }
       else { notify('💎 High Roller... high losses. -$1,000', 'bad'); }
+      startCooldown('high_roller');
       reopenCurrent();
       break;
     }
@@ -1687,6 +1772,7 @@ function handleAction(action, btn) {
       break;
 
     case 'arcade_ticket':
+      if (!checkCooldown('arcade_ticket')) return;
       if (!spend(15)) return;
       {
         const roll = Math.random();
@@ -1702,6 +1788,7 @@ function handleAction(action, btn) {
           notify('👾 The house claims another victim.', 'bad');
         }
       }
+      startCooldown('arcade_ticket');
       reopenCurrent();
       break;
     case 'arcade_highscore':
@@ -2109,7 +2196,7 @@ function hasSave() {
 function saveGame() {
   try {
     const snapshot = {
-      v: 3,
+      v: 4,
       ts: Date.now(),
       money: state.money,
       energy: state.energy,
@@ -2138,6 +2225,7 @@ function saveGame() {
       sick: state.sick,
       xpFatigue: state.xpFatigue,
       sickStreak: state.sickStreak,
+      actionCooldownUntil: state.actionCooldownUntil,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
   } catch (e) {
